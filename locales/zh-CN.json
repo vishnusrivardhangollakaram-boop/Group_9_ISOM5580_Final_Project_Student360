@@ -325,5 +325,10 @@
   "Keep the answer from the verified record": "保留基于已核实记录的答复",
   "Collect the supported answer or proposed plan": "获取有依据的答复或拟定计划",
   "Prepare the answer for review": "准备待审核的答复",
-  "Progress report": "学习进展报告"
+  "Progress report": "学习进展报告",
+  "Read your responses and follow requests awaiting review.": "查看回复及等待审核的请求。",
+  "Ask your first question": "开始提问",
+  "Your requests": "您的请求",
+  "{count} in this session": "本次会话中有 {count} 项",
+  "View request →": "查看请求 →"
 }

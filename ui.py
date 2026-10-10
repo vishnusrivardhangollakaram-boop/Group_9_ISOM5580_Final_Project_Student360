@@ -46,8 +46,8 @@ def icon(name: str, size: int = 22) -> str:
 
 def css(school: bool = False):
     style = (ROOT / 'assets' / 'style.css').read_text(encoding='utf-8')
-    tokens = ('--ink:#17283f;--muted:#6a7688;--accent:#345bb2;--accent-deep:#172d50;--accent-tint:#eef2fc;--canvas:#f5f6fa;--line:#e2e6ef;'
-              if school else '--ink:#172d39;--muted:#697780;--accent:#147d74;--accent-deep:#123c42;--accent-tint:#edf7f5;--canvas:#f8fafb;--line:#e2e9ec;')
+    tokens = ('--ink:#17283f;--muted:#56677d;--accent:#345bb2;--accent-deep:#172d50;--accent-tint:#eef2fc;--canvas:#f5f6fa;--line:#e2e6ef;'
+              if school else '--ink:#172d39;--muted:#566b76;--accent:#147d74;--accent-deep:#123c42;--accent-tint:#edf7f5;--canvas:#f8fafb;--line:#e2e9ec;')
     st.html('<style>' + style + '</style><style>:root{' + tokens + '}</style>')
 
 
@@ -88,7 +88,21 @@ def school_header(reviewer: str = ''):
 
 
 def page_heading(title: str, description: str = '', kicker: str = ''):
-    st.html(f'<header class="page-heading"><div class="eyebrow">{escape(t(kicker))}</div><h1>{escape(t(title))}</h1><p>{escape(t(description))}</p></header>')
+    kicker_html = '<div class="eyebrow">' + escape(t(kicker)) + '</div>' if kicker else ''
+    description_html = '<p>' + escape(t(description)) + '</p>' if description else ''
+    st.html(f'<header class="page-heading">{kicker_html}<h1>{escape(t(title))}</h1>{description_html}</header>')
+
+
+def request_preview(case: dict):
+    name = case.get('student') or t('Your request')
+    monogram = ''.join(word[0] for word in name.split()[:2]).upper()
+    st.html(f'<div class="request-preview"><div class="request-preview-top"><span class="student-monogram">{escape(monogram)}</span><h3>{escape(name)}</h3></div><p class="request-date">{escape(local_time(case["created"], True))}</p><p class="request-question">{escape(case["question"])}</p></div>')
+
+
+def request_heading(case: dict, label: str, tone: str):
+    name = case.get('student') or t('Your request')
+    details = case_ref(case) + ' · ' + local_time(case['created'])
+    st.html(f'<header class="request-heading"><div><h2>{escape(name)}</h2><p>{escape(details)}</p></div><span class="badge tone-{tone}" role="status"><span></span>{escape(t(label))}</span></header>')
 
 
 def section(title: str, caption: str = '', kicker: str = ''):

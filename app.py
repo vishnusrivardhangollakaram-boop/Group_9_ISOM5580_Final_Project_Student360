@@ -125,12 +125,6 @@ def activate_parent(case: dict):
     st.query_params['request'] = case['public_token']
 
 
-def open_parent_report(case: dict):
-    activate_parent(case)
-    st.session_state.parent_page = 'Ask a question'
-    st.session_state.focus_epoch += 1
-
-
 def reuse_question(case: dict):
     """Return a retained question to the form without starting a duplicate run."""
     st.session_state.question = case['question']
@@ -177,13 +171,14 @@ def run_request(case_id: str, start: bool = False):
         progress.update(label=t(label), state='error' if case['phase'] == 'interrupted' else 'complete')
 
 
-def render_report(case: dict, school: bool = False):
-    ui.scroll_anchor('s360-report', ('school-report-' if school else 'parent-report-') + case['id'] + '-' + str(st.session_state.focus_epoch))
+def render_report(case: dict, school: bool = False, embedded: bool = False):
+    if not embedded:
+        ui.scroll_anchor('s360-report', ('school-report-' if school else 'parent-report-') + case['id'] + '-' + str(st.session_state.focus_epoch))
     with st.container(key='report_card'):
-        head, download = st.columns([4, 1.5], vertical_alignment='center')
+        head, download = st.columns([3, 1.5], vertical_alignment='center')
         file_stub = 'Student360_' + re.sub(r'[^A-Za-z0-9_-]', '_', case.get('student') or 'Report') + '_' + case['id'][:8]
         with head:
-            ui.section('Student progress report', ui.case_ref(case) + ' · ' + ui.local_time(case['created']))
+            ui.section('Student progress report', '' if embedded else ui.case_ref(case) + ' · ' + ui.local_time(case['created']))
         with download:
             with st.popover(t('Download report'), width='stretch'):
                 st.download_button(t('Printable report'), ui.printable_report(case), file_name=file_stub + '.html',
@@ -207,22 +202,25 @@ def render_report(case: dict, school: bool = False):
                                file_name=file_stub + '_review.json', mime='application/json', key='audit_' + case['id'])
 
 
-@st.fragment(run_every='8s')
-def parent_live_report(case_id: str):
+def render_parent_request(case_id: str, embedded: bool = False, refresh: bool = True):
     case = store.get(case_id)
     if not case:
         render_empty('This request is no longer available', 'The server’s temporary request inbox may have been reset. Please send a new question.')
         return
-    if client and case['phase'] != 'complete':
+    if refresh and client and case['phase'] != 'complete':
         refresh_result(client, store, case_id)
         case = store.get(case_id)
     label, note, tone = display_state(case)
-    if case['phase'] != 'complete':
+    if embedded:
+        ui.scroll_anchor('s360-request', 'parent-detail-' + case_id + '-' + case['phase'] + '-' + str(st.session_state.focus_epoch))
+        ui.request_heading(case, label, tone)
+    elif case['phase'] != 'complete':
         ui.scroll_anchor('s360-request', 'parent-request-' + case_id + '-' + case['phase'] + '-' + case.get('review_kind', '') + '-' + str(st.session_state.focus_epoch))
     else:
         ui.anchor('s360-request')
-    ui.page_heading(case.get('student') or 'Your request', ui.case_ref(case) + ' · ' + ui.local_time(case['created']), 'YOUR LEARNING CONVERSATION')
-    if case['phase'] in {'complete', 'interrupted'}:
+    if not embedded:
+        ui.page_heading(case.get('student') or 'Your request', ui.case_ref(case) + ' · ' + ui.local_time(case['created']), 'YOUR LEARNING CONVERSATION')
+    if case['phase'] == 'interrupted' or (case['phase'] == 'complete' and not embedded):
         ui.banner(label, note, tone)
     if case['phase'] != 'complete':
         ui.tracker(case)
@@ -230,7 +228,7 @@ def parent_live_report(case_id: str):
         st.write(case['question'])
         st.caption(t(ui.case_ref(case) + ' · ' + ui.local_time(case['created']) + ' · ' + LANGUAGE_LABELS[case['report_language']]))
     if case['phase'] == 'complete':
-        render_report(case)
+        render_report(case, embedded=embedded)
     elif case['phase'] == 'awaiting_review':
         teacher = case['review_kind'] == 'teacher'
         title = 'Waiting for teacher review' if teacher else 'More evidence is needed'
@@ -261,6 +259,11 @@ def parent_live_report(case_id: str):
             if st.button(t('Continue preparing the report'), key='continue_' + case_id):
                 run_request(case_id)
                 st.rerun()
+
+
+@st.fragment(run_every='8s')
+def parent_live_report(case_id: str):
+    render_parent_request(case_id)
 
 
 def question_form():
@@ -316,24 +319,44 @@ def parent_question_view():
     ui.school_showcase()
 
 
+@st.fragment(run_every='8s')
 def parent_history_view():
-    ui.page_heading('Your learning conversations.', 'Requests from this browser session, together in one place.', 'MY REPORTS')
+    ui.page_heading('My reports', 'Read your responses and follow requests awaiting review.')
     cases = [store.get(i) for i in reversed(st.session_state.parent_cases)]
     cases = [c for c in cases if c]
     if not cases:
         render_empty('Your progress reports will appear here', 'Start with a question in the Parent portal. You can return to each request using its bookmarked URL.', 'book')
+        if st.button(t('Ask your first question'), type='primary', key='first_question'):
+            navigate('Ask a question')
+            st.rerun()
         return
-    for case in cases:
-        label, _, tone = display_state(case)
-        with st.container(key='case_card_parent_' + case['id']):
-            copy, state, action = st.columns([3.7, 1.8, 1], vertical_alignment='center')
-            with copy:
-                case_summary(case)
-            with state:
-                ui.badge(label, tone)
-            with action:
-                st.button(t('Open →'), key='open_parent_' + case['id'], width='stretch',
-                          on_click=open_parent_report, args=(case,))
+    selected = next((c for c in cases if c['id'] == st.session_state.parent_active), cases[0])
+    if st.session_state.parent_active != selected['id']:
+        activate_parent(selected)
+    if client and selected['phase'] != 'complete':
+        refresh_result(client, store, selected['id'])
+        selected = store.get(selected['id']) or selected
+        cases = [selected if c['id'] == selected['id'] else c for c in cases]
+    # One fragment refreshes both the list and selected response. No nested
+    # fragments, duplicate workflow starts, or requests for other students.
+    with st.container(key='history_workspace'):
+        requests, response = st.columns([1, 2.15], gap='medium')
+        with requests, st.container(key='history_list'):
+            ui.section('Your requests', t('{count} in this session', count=len(cases)))
+            for case in cases:
+                label, _, tone = display_state(case)
+                active = case['id'] == selected['id']
+                prefix = 'history_selected_' if active else 'history_item_'
+                with st.container(key=prefix + case['id']):
+                    ui.request_preview(case)
+                    ui.badge(label, tone)
+                    if st.button(t('View request →'), key='open_parent_' + case['id'], width='stretch',
+                                 type='primary' if active else 'secondary'):
+                        activate_parent(case)
+                        st.session_state.focus_epoch += 1
+                        st.rerun()
+        with response, st.container(key='history_detail'):
+            render_parent_request(selected['id'], embedded=True, refresh=False)
 
 
 def school_login():

@@ -11,6 +11,9 @@ Your final API key and `https://api.dify.ai/v1` endpoint are already configured 
 - **Parent:** a bright, clean surface with a teal/navy wordmark, an editorial portrait panel and a focused white question card. The active request opens on its own report page.
 - **Teacher / School:** a distinct blue/navy palette, a staff entry page with a classroom portrait, a prominent real-school header and a compact review workspace. The original Christian Education reception image also appears as a large feature on both entry pages, with a full-photo expander.
 - **Navigation:** **Parent** and **Teacher / School** switch workspaces. **New question**, **My reports**, **Review inbox** and **Completed reports** open implemented pages. **Options** contains auto-scroll, reviewer name and staff sign-out.
+- **Readable type:** main text and controls use a 16–17 px scale, with larger student names and report headings. Supporting labels and dates use 13–15 px instead of the previous 8–12 px scale. Muted text has stronger contrast in both workspaces.
+- **My reports:** a compact request list sits beside the selected response. The current request opens automatically, or the newest request is selected if none is active. Requests and their selected response refresh together every eight seconds. Narrow screens stack the response below a scrollable request list. The full original question remains available in its expander.
+- **Tighter spacing:** reduced navigation, heading and footer gaps; removed forced blank height in the question and sign-in cards. The report view shows actual response content immediately instead of a single sparse row.
 - **Rendering fixes:** no icon-only logo; decorative vectors are embedded as self-contained image sources instead of inline SVG. Primary-button labels have explicit contrast, including Streamlit's nested Markdown labels.
 - **Real states:** all reports, review decisions and inbox counts come from actual requests. Requests denied before a run ID is returned do not display a preparing-response tracker. Their questions can be restored to the form without an automatic retry.
 
@@ -20,7 +23,7 @@ There are no decorative notifications, invented progress scores, inactive menu i
 
 Dependencies are pinned to **Streamlit 1.65.0**. The trusted local scroll script uses `st.html(..., unsafe_allow_javascript=True)`. User questions, reports and credentials are never passed into executable JavaScript. Images are bundled locally. The people photographs depict fictional models; your supplied school photograph is included unchanged. See `MEDIA_NOTES.md`.
 
-**Updating an existing deployment:** replace the repository’s Python files, `assets/`, `requirements.txt` and `.streamlit/config.toml` with this package. Copy the delivered `.streamlit/secrets.toml` into **Streamlit → App settings → Secrets**, save, and reboot the app. Keep that credentials file out of GitHub. On macOS, **Command + Shift + .** reveals `.streamlit` in Finder; on Windows, enable **View → Show → Hidden items** if needed.
+**Updating an existing deployment:** replace the repository’s Python files, `assets/`, `locales/`, `requirements.txt` and `.streamlit/config.toml` with this package, then reboot the app. Keep your working **Streamlit → App settings → Secrets** values; this layout update does not require a credential change. The delivered `.streamlit/secrets.toml` is for local use or a new deployment and must stay out of GitHub. On macOS, **Command + Shift + .** reveals `.streamlit` in Finder; on Windows, enable **View → Show → Hidden items** if needed.
 
 ## 1. Start locally
 
@@ -101,7 +104,7 @@ Browser/Streamlit service menus are platform UI; they are not translated by the 
 - A clean teal-and-navy parent portal with a focused question form, student name and a global language selector.
 - Honest progress states: preparing, school verification, teacher review, completed response or connection attention.
 - A request tracker and final report with the backend’s sources and review wording. Human review appears in the tracker only when it occurs.
-- **My reports** for requests from the current browser session.
+- **My reports** for requests from the current browser session, with the selected response open beside the request list. Choosing a request displays that existing run; it does not submit the question again.
 - A **Download report** menu with Markdown and printable HTML downloads. Open the printable HTML in a browser and choose **Print → Save as PDF** to export a PDF.
 - A private request URL, saved in the browser address bar, for returning after a review or browser refresh. Treat that URL as access to its report.
 
@@ -174,7 +177,7 @@ Requests and review submissions are not retried automatically. Reconnection foll
 
 ### HTTP 403: “The app connection was denied”
 
-**Current check:** the supplied app key succeeded against Dify during this update. Both metadata endpoints returned HTTP 200, and the Vishnu workflow completed successfully. Your screenshot uses the correct Secrets variable names and base endpoint. The historical 403 explanation below remains useful if a deployment still returns it; it does not mean API access is currently disabled.
+**Previously completed API check:** the supplied app key succeeded against Dify before this typography and layout revision. Both metadata endpoints returned HTTP 200, and the Vishnu workflow completed successfully. Your screenshot uses the correct Secrets variable names and base endpoint. The historical 403 explanation below remains useful if a deployment still returns it; it does not mean API access is currently disabled. This revision does not repeat the API check.
 
 The screenshots show the old frontend's message for **HTTP 403**, before a workflow ID was received. The request was denied at the API boundary: the Vishnu/student-not-found branch was not reached. This is not a retrieval/chunking setting or evidence-gap result.
 
