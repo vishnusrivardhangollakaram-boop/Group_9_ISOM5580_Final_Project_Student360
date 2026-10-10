@@ -5,10 +5,56 @@ from datetime import datetime
 from html import escape
 from pathlib import Path
 from zoneinfo import ZoneInfo
+import base64
 import re
 import streamlit as st
 
 ROOT = Path(__file__).resolve().parent
+
+
+@st.cache_data(show_spinner=False)
+def asset_uri(filename: str) -> str:
+    """Cache public local images only; this cache never holds a credential or report."""
+    path = ROOT / 'assets' / filename
+    mime = 'image/png' if path.suffix == '.png' else 'image/jpeg'
+    return 'data:' + mime + ';base64,' + base64.b64encode(path.read_bytes()).decode('ascii')
+
+
+def install_motion(enabled: bool = True):
+    script = (ROOT / 'assets' / 'scroll.js').read_text(encoding='utf-8')
+    flag = 'true' if enabled else 'false'
+    # The executed code is a static local asset. User questions and Dify content are
+    # never passed to JavaScript-enabled HTML.
+    st.html('<div data-s360-controller data-s360-autoscroll="' + flag + '" style="display:none"></div><script>' + script + '</script>',
+            unsafe_allow_javascript=True)
+
+
+def anchor(name: str):
+    if name not in {'s360-top', 's360-question', 's360-request', 's360-report', 's360-review', 's360-progress'}:
+        return
+    st.html(f'<div id="{name}" class="scroll-anchor" aria-hidden="true"></div>')
+
+
+def scroll_anchor(name: str, event_key: str):
+    if name not in {'s360-request', 's360-report', 's360-review', 's360-progress'}:
+        return
+    st.html(f'<div id="{name}" class="scroll-anchor" data-s360-scroll-key="{escape(event_key, quote=True)}" aria-hidden="true"></div>')
+
+
+def back_to_top():
+    st.html('<button type="button" class="back-to-top" data-s360-scroll-to="s360-top" aria-label="Back to top">↑ <span>Top</span></button>')
+
+
+def school_card(compact: bool = False):
+    image = asset_uri('christian_school.png')
+    css_class = 'school-photo-card school-photo-compact' if compact else 'school-photo-card'
+    st.html(f'<div class="{css_class}"><img src="{image}" alt="The Christian Education school reception supplied by the school" loading="lazy"/><div class="school-photo-caption"><span class="photo-kicker">OUR SCHOOL</span><b>Christian Education</b><span>School & home, connected.</span></div></div>')
+
+
+def process_strip():
+    steps = [('file', 'Records'), ('people', 'Human review'), ('check', 'Your report')]
+    content = ''.join(f'<div><span>{icon(symbol,20)}</span><b>{label}</b></div>' for symbol, label in steps)
+    st.html('<div class="visual-process">' + content + '</div>')
 
 ICONS = {
     'book': '<path d="M4 5.5c3-1 5-.5 8 1.5v14c-3-2-5-2.5-8-1.5zM20 5.5c-3-1-5-.5-8 1.5v14c3-2 5-2.5 8-1.5z"/>',
@@ -50,10 +96,22 @@ def topbar(school: bool):
 
 
 def hero(school: bool):
+    photo = asset_uri('teacher_students.png' if school else 'parent_child.png')
     if school:
-        st.html(f'<section class="hero hero-school"><div class="hero-copy"><div class="eyebrow">THE REVIEW WORKSPACE</div><h1>Expert judgement.<br>Clearer outcomes.</h1><p>Verify the record. Refine the plan. Give families a response they can rely on.</p><div class="hero-chips"><span>{icon("shield",15)} Evidence review</span><span>{icon("check",15)} Teacher approval</span><span>{icon("file",15)} Review record</span></div></div><div class="hero-art school-art"><div class="art-ring"></div><div class="art-panel"><div class="art-panel-head">THE HUMAN PERSPECTIVE</div><div class="art-row"><span class="art-icon">{icon("search",20)}</span><div><b>Check the supporting record</b><small>Identify what is established</small></div></div><div class="art-row"><span class="art-icon">{icon("people",20)}</span><div><b>Apply professional judgement</b><small>Edit before you approve</small></div></div><div class="art-bottom">A considered response for every family {icon("arrow",17)}</div></div></div></section>')
+        school_photo = asset_uri('christian_school.png')
+        eyebrow = 'TEACHER / SCHOOL'
+        title = 'Good judgement.<br>Better next steps.'
+        subtitle = 'Check evidence. Refine plans. Support every learner.'
+        tags = icon('shield', 15) + ' Evidence' + '<span class="hero-dot">·</span>' + icon('people', 15) + ' Human review'
+        visual = f'<div class="hero-visual"><img class="hero-photo" src="{photo}" alt="Illustrative teacher supporting two students with their learning" fetchpriority="high"/><div class="school-inset"><img src="{school_photo}" alt="Christian Education school reception"/><div><span>OUR SCHOOL</span><b>Christian Education</b></div></div></div>'
     else:
-        st.html(f'<section class="hero hero-parent"><div class="hero-copy"><div class="eyebrow">A STRONGER SCHOOL–HOME CONNECTION</div><h1>Understand progress.<br>Support what comes next.</h1><p>A clear view of your child’s learning, grounded in their records and guided by their teachers.</p><div class="hero-chips"><span>{icon("file",15)} Record-based answers</span><span>{icon("people",15)} Human review</span><span>{icon("message",15)} Your report language</span></div></div><div class="hero-art"><div class="art-ring"></div><div class="art-panel"><div class="art-panel-head">FROM QUESTION TO CLARITY</div><div class="art-row"><span class="art-icon">{icon("book",21)}</span><div><b>Learning records</b><small>The evidence behind your answer</small></div><span class="art-dot"></span></div><div class="art-row"><span class="art-icon">{icon("people",21)}</span><div><b>School & teacher review</b><small>A human decision when needed</small></div><span class="art-dot"></span></div><div class="art-bottom">One clear, considered progress report {icon("arrow",17)}</div></div></div></section>')
+        eyebrow = 'PARENT PORTAL'
+        title = 'Every step.<br>A clearer picture.'
+        subtitle = 'Understand progress. Support what comes next.'
+        tags = icon('book', 15) + ' Learning records' + '<span class="hero-dot">·</span>' + icon('people', 15) + ' Teacher guidance'
+        visual = f'<div class="hero-visual"><img class="hero-photo" src="{photo}" alt="Illustrative parent and child learning together at home" fetchpriority="high"/><div class="photo-stamp"><span>{icon("people",18)}</span><div><b>Learning, together.</b><small>A stronger school–home connection.</small></div></div></div>'
+    role_class = 'hero-school' if school else 'hero-parent'
+    st.html(f'<section class="hero photo-hero {role_class}"><div class="hero-copy"><div class="eyebrow">{eyebrow}</div><h1>{title}</h1><p>{subtitle}</p><div class="hero-tags">{tags}</div></div>{visual}</section>')
 
 
 def section(title: str, caption: str = '', kicker: str = ''):

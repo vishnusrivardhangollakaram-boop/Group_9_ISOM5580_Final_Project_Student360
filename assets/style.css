@@ -124,3 +124,47 @@ button:focus-visible { outline:3px solid #6fc3cf !important; outline-offset:3px;
 @media(max-width:800px) { [data-testid="stMainBlockContainer"] { padding:1rem 1.1rem; }.hero { padding:28px 24px; }.hero h1 { font-size:32px; }.hero-art { display:none; }.hero-copy { max-width:none; }.hero-parent,.hero-school { min-height:230px; }.tracker { flex-wrap:wrap; gap:14px; }.tracker-step { flex-basis:42%; }.topbar-caption { display:none; }.workspace-pill { font-size:8px; padding:7px 10px; }.app-footer { flex-direction:column; gap:7px; align-items:flex-start; }.st-key-question_card,.st-key-report_card,.st-key-school_review { padding:18px !important; } }
 @media(prefers-reduced-motion:reduce) { * { transition:none !important; animation:none !important; } }
 @media print { [data-testid="stSidebar"],[data-testid="stHeader"],button,.hero,.app-footer { display:none !important; }.stApp { background:white !important; }.st-key-report_card { box-shadow:none;border:0; } }
+
+/* Photo-led portals: compact copy, generous image space and a real school card. */
+.photo-hero { padding:22px 22px 22px 37px; gap:28px; min-height:0; }
+.photo-hero .hero-copy { flex:0 0 40%; max-width:440px; }
+.photo-hero h1 { font-size:clamp(33px,3.35vw,47px); letter-spacing:-1.65px; margin-bottom:15px; }
+.photo-hero .eyebrow { font-size:9px; letter-spacing:2px; margin-bottom:14px; }
+.photo-hero p { font-size:13px; margin:0 0 24px; }
+.photo-hero.hero-parent { background:radial-gradient(ellipse at 4% 95%,#daeee5 0,transparent 63%),#edf5f0; }
+.photo-hero.hero-school { background:radial-gradient(ellipse at 2% 5%,#264b73 0,transparent 68%),#162e49; }
+.photo-hero.hero-school h1 { font-size:clamp(32px,3vw,42px); line-height:1.12; }
+.hero-tags { display:flex; align-items:center; flex-wrap:wrap; gap:7px; color:#5c7971; font-size:10px; font-weight:550; }
+.hero-dot { padding:0 3px; opacity:.55; }
+.hero-school .hero-tags { color:#b2c8df; }
+.hero-visual { flex:1; min-width:290px; height:303px; position:relative; border-radius:16px; overflow:hidden; box-shadow:0 8px 28px #13334210; }
+.hero-photo { width:100%; height:100%; object-fit:cover; object-position:50% 42%; display:block; }
+.photo-stamp { position:absolute; bottom:16px; left:16px; display:flex; align-items:center; gap:10px; background:#fffffff0; border:1px solid #fff; border-radius:11px; padding:11px 14px; box-shadow:0 7px 24px #1b433520; backdrop-filter:blur(8px); }
+.photo-stamp > span { color:#087f83; display:grid; place-items:center; width:31px; height:31px; border-radius:8px; background:#edf7f3; }
+.photo-stamp b { color:#274e47; font-size:11px; display:block; }
+.photo-stamp small { color:#6d897f; font-size:9px; display:block; margin-top:3px; }
+.school-inset { position:absolute; bottom:15px; right:15px; display:flex; align-items:center; gap:10px; width:190px; padding:8px; background:#fffffff0; border:1px solid #ffffff; border-radius:11px; box-shadow:0 7px 24px #14284030; }
+.school-inset img { width:50px; height:61px; object-fit:cover; object-position:50% 32%; border-radius:6px; }
+.school-inset span { display:block; color:#8497a7; font-size:7px; letter-spacing:1.15px; font-weight:700; margin-bottom:5px; }
+.school-inset b { display:block; color:#2c4560; font-size:10px; font-weight:650; }
+.school-photo-card { position:relative; overflow:hidden; height:274px; border-radius:16px; border:1px solid #dce5ec; box-shadow:0 6px 22px #1c355007; }
+.school-photo-card img { display:block; width:100%; height:100%; object-fit:cover; object-position:50% 35%; }
+.school-photo-card::after { content:""; position:absolute; inset:38% 0 0; background:linear-gradient(transparent,#112537db); }
+.school-photo-caption { position:absolute; z-index:1; left:20px; right:20px; bottom:19px; color:#fff; }
+.photo-kicker { display:block; font-size:8px; font-weight:650; letter-spacing:1.6px; color:#d3e3e9; margin-bottom:6px; }
+.school-photo-caption b { display:block; font-size:18px; font-weight:600; letter-spacing:-.4px; }
+.school-photo-caption > span:last-child { display:block; margin-top:5px; font-size:10px; color:#d7e1e7; }
+.school-photo-compact { height:325px; }
+.visual-process { display:flex; align-items:center; justify-content:space-between; border:1px solid var(--line); border-radius:12px; background:#fff; padding:15px 12px; margin-top:2px; }
+.visual-process > div { display:flex; flex:1; flex-direction:column; align-items:center; gap:7px; position:relative; }
+.visual-process > div + div::before { position:absolute; left:-11%; top:15px; content:""; width:20%; border-top:1px solid #d9e6e4; }
+.visual-process span { display:grid; place-items:center; color:var(--accent); background:var(--accent-tint); border-radius:9px; width:33px; height:33px; }
+.visual-process b { color:#667e88; font-size:9px; font-weight:600; }
+.st-key-login_card { margin:0; max-width:none; }
+.scroll-anchor { height:0; min-height:0; margin:0; padding:0; scroll-margin-top:22px; overflow:visible; }
+.back-to-top { position:fixed; bottom:22px; right:23px; z-index:900; display:flex; align-items:center; gap:6px; font-size:12px; font-weight:650; color:#436979; background:#ffffffed; border:1px solid #d8e2e9; border-radius:999px; padding:10px 14px; cursor:pointer; box-shadow:0 5px 18px #1d354411; }
+.back-to-top:hover { border-color:var(--accent); color:var(--accent); }
+.back-to-top:focus-visible { outline:3px solid #6fc3cf; outline-offset:3px; }
+@media(max-width:1100px) { .photo-hero { gap:22px; padding-left:27px; }.photo-hero .hero-copy { flex-basis:40%; }.hero-visual { height:290px; min-width:245px; }.photo-hero h1 { font-size:36px; }.photo-hero.hero-school h1 { font-size:33px; }.hero-tags { font-size:9px; gap:5px; } }
+@media(max-width:800px) { .photo-hero { flex-direction:column; gap:20px; padding:24px 20px 20px; align-items:stretch; }.photo-hero .hero-copy { flex:auto; max-width:none; }.photo-hero h1 { font-size:35px; }.photo-hero.hero-school h1 { font-size:32px; }.photo-hero p { margin-bottom:17px; }.hero-visual { flex:auto; width:100%; height:270px; min-width:0; }.hero-photo { object-position:50% 36%; }.school-photo-card { height:255px; }.school-photo-compact { height:240px; }.back-to-top { bottom:15px; right:14px; padding:9px 12px; }.photo-stamp { bottom:12px; left:12px; padding:9px 11px; }.school-inset { bottom:12px; right:12px; } }
+@media print { .back-to-top,.school-photo-card,.visual-process { display:none !important; } }

@@ -60,6 +60,7 @@ defaults = {
     'question': '', 'student_name': '', 'report_language': 'English', 'parent_cases': [],
     'parent_active': '', 'school_active': '', 'school_auth': '', 'reviewer_name': '',
     'parent_page': 'Ask a question', 'school_page': 'Review inbox',
+    'auto_scroll': True, 'focus_epoch': 0,
 }
 for key, value in defaults.items():
     if key not in st.session_state:
@@ -76,6 +77,7 @@ if public_token:
 
 def portal_changed():
     st.query_params['view'] = 'school' if st.session_state.portal == 'Teacher / School' else 'parent'
+    st.session_state.focus_epoch += 1
 
 
 def choose_example(name: str, question: str):
@@ -92,6 +94,7 @@ def activate_parent(case: dict):
 def open_parent_report(case: dict):
     activate_parent(case)
     st.session_state.parent_page = 'Ask a question'
+    st.session_state.focus_epoch += 1
 
 
 def auth_digest() -> str:
@@ -124,6 +127,7 @@ def friendly_step(title: str) -> str:
 def run_request(case_id: str, start: bool = False):
     if not client:
         return
+    ui.scroll_anchor('s360-progress', 'progress-' + case_id + '-' + str(st.session_state.focus_epoch))
     with st.status('Preparing the request…', expanded=False) as progress:
         execute(client, store, case_id, start=start,
                 progress=lambda title: progress.update(label=friendly_step(title)))
@@ -133,10 +137,11 @@ def run_request(case_id: str, start: bool = False):
 
 
 def render_report(case: dict, school: bool = False):
+    ui.scroll_anchor('s360-report', ('school-report-' if school else 'parent-report-') + case['id'] + '-' + str(st.session_state.focus_epoch))
     with st.container(key='report_card'):
         head, download = st.columns([3, 2], vertical_alignment='center')
         with head:
-            ui.section('Student Progress Report', ui.case_ref(case) + ' · ' + ui.local_time(case['created']), 'YOUR COMPLETED RESPONSE')
+            ui.section('Student Progress Report', ui.case_ref(case) + ' · ' + ui.local_time(case['created']))
         with download:
             ui.badge(LANGUAGE_LABELS.get(case['report_language'], case['report_language']))
         st.markdown(ui.report_body(case['report']))
@@ -149,7 +154,7 @@ def render_report(case: dict, school: bool = False):
         with printable:
             st.download_button('Download printable report', ui.printable_report(case),
                                file_name=file_stub + '.html', mime='text/html', width='stretch', key='print_' + case['id'])
-        st.caption('For a PDF, open the printable report and choose Print → Save as PDF in your browser.')
+        st.caption('Printable report → Print → Save as PDF.')
     if school and case.get('review_history'):
         with st.expander('School review record'):
             for i, entry in enumerate(case['review_history']):
@@ -174,22 +179,25 @@ def parent_live_report(case_id: str):
         refresh_result(client, store, case_id)
         case = store.get(case_id)
     label, note, tone = display_state(case)
-    ui.section('Your latest request', 'For ' + (case.get('student') or 'the student in your question'))
+    if case['phase'] != 'complete':
+        ui.scroll_anchor('s360-request', 'parent-request-' + case_id + '-' + case['phase'] + '-' + str(st.session_state.focus_epoch))
+    else:
+        ui.anchor('s360-request')
+    ui.section('Your latest request', case.get('student') or 'Student progress')
     ui.banner(label, note, tone)
     ui.tracker(case)
     with st.expander('Your question & request details'):
         st.write(case['question'])
         st.caption(ui.case_ref(case) + ' · ' + ui.local_time(case['created']) + ' · ' + LANGUAGE_LABELS[case['report_language']])
-        st.caption('This page keeps checking for an updated response while it is open.')
     if case['phase'] == 'complete':
         render_report(case)
     elif case['phase'] == 'awaiting_review':
         teacher = case['review_kind'] == 'teacher'
         title = 'Your teacher is the next step' if teacher else 'The school will check the record'
-        description = ('Your plan is awaiting teacher approval. The reviewed version will appear here once the school completes the decision.'
-                       if teacher else 'The available report does not yet support a reliable answer. The school can check an existing record, supply a verified correction, or request the missing information.')
+        description = ('Your reviewed plan will appear here after the teacher’s decision.'
+                       if teacher else 'More supporting information is needed. Your report will update after the school’s review.')
         render_empty(title, description, 'people' if teacher else 'search')
-        st.caption('You can keep this page open or bookmark this request URL to return to the response.')
+        st.caption('Keep this page open, or bookmark this request.')
     elif case['phase'] == 'interrupted':
         st.warning('We could not complete the connection. Your request has been retained.')
         if case['run_id'] and client:
@@ -209,10 +217,11 @@ def parent_live_report(case_id: str):
 
 
 def parent_question_view():
-    left, right = st.columns([2.1, 1], gap='large')
+    ui.anchor('s360-question')
+    left, right = st.columns([2.25, 1], gap='large')
     with left:
         with st.container(key='question_card'):
-            ui.section('Any Question or Concern?', 'We are here to help. Ask about progress, a result or the support your child needs.', 'START A CONVERSATION')
+            ui.section('Any question or concern?', 'We are here to help.')
             with st.form('parent_question_form'):
                 name, language = st.columns([1, 1.3])
                 with name:
@@ -221,9 +230,9 @@ def parent_question_view():
                 with language:
                     selected_language = st.selectbox('Report language', LANGUAGES, key='report_language',
                                                       format_func=lambda x: LANGUAGE_LABELS[x])
-                question = st.text_area('Your question or concern', key='question', height=140, max_chars=1900,
-                    placeholder='What would you like to understand about your child’s learning? Include the exam, subject or date where relevant.')
-                st.caption('Answers use the available records. Learning plans are shared after teacher review.')
+                question = st.text_area('Your question', key='question', height=125, max_chars=1900,
+                    placeholder='Ask about progress, an exam result or a support plan…')
+                st.caption('Include the exam or date when relevant.')
                 submitted = st.form_submit_button('Get my progress report', type='primary', width='stretch', disabled=not client)
             if submitted:
                 q = question.strip()
@@ -240,28 +249,24 @@ def parent_question_view():
                     case = store.create(q, selected_language, alias)
                     st.session_state.parent_cases.append(case['id'])
                     activate_parent(case)
+                    st.session_state.focus_epoch += 1
                     run_request(case['id'], start=True)
                     st.rerun()
-        with st.expander('Need inspiration? Explore the demonstration questions'):
-            st.caption('These fill the question only. Every answer and review decision comes from the published school workflow.')
+        with st.expander('Try a demo question'):
             for name, topic, question in EXAMPLES:
                 st.button(name + ' · ' + topic, key='example_' + name, width='stretch',
                           on_click=choose_example, args=(name, question))
     with right:
-        with st.container(key='how_card'):
-            ui.section('A thoughtful process', 'A clear answer starts with the right information.')
-            items = [('file', '1. Understand the record', 'We find the student’s learning records and check what supports your question.'),
-                     ('people', '2. Bring in the school', 'Missing information goes to school review. Proposed learning plans go to a teacher.'),
-                     ('check', '3. Share a clear response', 'Read the completed report in your chosen language, with its review status and sources.')]
-            for symbol, title, text in items:
-                st.html(f'<div class="how-step"><span class="how-icon">{ui.icon(symbol,20)}</span><div><b>{escape(title)}</b><p>{escape(text)}</p></div></div>')
-        st.html('<div class="quiet-note">A score is one part of the picture. When information is missing, the school checks it before confirming an answer.</div>')
+        ui.school_card()
+        ui.process_strip()
+        with st.expander('How your report is prepared'):
+            st.markdown('1. Check the student’s records.\n2. Ask the school or teacher to review when needed.\n3. Share the completed report in your chosen language.')
     if st.session_state.parent_active:
         parent_live_report(st.session_state.parent_active)
 
 
 def parent_history_view():
-    ui.section('My reports', 'Your requests from this browser session, including any request restored with its private URL.')
+    ui.section('My reports', 'Your questions. Your completed responses.')
     cases = [store.get(i) for i in reversed(st.session_state.parent_cases)]
     cases = [c for c in cases if c]
     if not cases:
@@ -280,8 +285,11 @@ def parent_history_view():
 
 
 def school_login():
-    with st.container(key='login_card'):
-        ui.section('Enter the school workspace', 'Use the school access code to open the shared review inbox.', 'TEACHER / SCHOOL ACCESS')
+    school_photo, login = st.columns([1, 1.5], gap='large')
+    with school_photo:
+        ui.school_card(compact=True)
+    with login, st.container(key='login_card'):
+        ui.section('School workspace', 'Enter your school access code.')
         with st.form('school_login'):
             code = st.text_input('School access code', type='password', placeholder='Enter your access code')
             reviewer = st.text_input('Your name', placeholder='e.g. Ms. Chen', help='Included in this app’s review record.')
@@ -290,10 +298,11 @@ def school_login():
             if hmac.compare_digest(code, settings.school_access_code):
                 st.session_state.school_auth = auth_digest()
                 st.session_state.reviewer_name = reviewer.strip() or 'School reviewer'
+                st.session_state.focus_epoch += 1
                 st.rerun()
             else:
                 st.error('The school access code did not match.')
-        st.caption('Parents can ask questions and read final reports. Review decisions belong in the school workspace.')
+        st.caption('For teachers and school reviewers.')
 
 
 def school_case_card(case: dict):
@@ -308,6 +317,7 @@ def school_case_card(case: dict):
             button = 'Review request' if case['phase'] == 'awaiting_review' else 'Open request'
             if st.button(button, key='open_school_' + case['id'], width='stretch', type='primary' if case['phase'] == 'awaiting_review' else 'secondary'):
                 st.session_state.school_active = case['id']
+                st.session_state.focus_epoch += 1
                 st.rerun()
 
 
@@ -322,13 +332,13 @@ def school_inbox(completed: bool = False):
     finished = [c for c in cases if c['phase'] == 'complete']
     a, b, c = st.columns(3)
     with a:
-        ui.stat('Record verification', len(record_cases), 'Requests awaiting school evidence', 'search', 'amber')
+        ui.stat('Record verification', len(record_cases), 'Awaiting school evidence', 'search', 'amber')
     with b:
-        ui.stat('Teacher decisions', len(teacher_cases), 'Plans awaiting review and approval', 'people', 'purple')
+        ui.stat('Teacher decisions', len(teacher_cases), 'Plans awaiting review', 'people', 'purple')
     with c:
-        ui.stat('Completed responses', len(finished), 'Responses prepared by the workflow', 'file', 'green')
+        ui.stat('Completed responses', len(finished), 'Ready to read', 'file', 'green')
     ui.section('Completed reports' if completed else 'Review inbox',
-               'Open a request to read its final response and review record.' if completed else 'Every request keeps its original question, evidence and review form together.')
+               'Reports and review history.' if completed else 'Check the evidence. Review the plan. Make your decision.')
     search, filter_col = st.columns([2, 1])
     with search:
         query = st.text_input('Find a request', placeholder='Search student, question or request reference', key='school_search_' + str(completed))
@@ -364,10 +374,22 @@ def review_fields(case: dict):
     left, right = st.columns([1, 1.1], gap='large')
     with left:
         with st.container(key='school_context'):
-            ui.section('Review context', 'The question and supporting material supplied by the school workflow.')
+            ui.section('Review context', 'Question & supporting records.')
             content = rendered_form_content(form)
             content = re.sub(r'^## [^\n]+\n*', '', content, count=1)
-            st.markdown(content)
+            # Keep the actual backend context available, with detailed instructions
+            # behind an expander rather than duplicating them next to the editor.
+            cutoff = re.search(r'\n### (?:Plan to review and edit|Record extract or verified school correction)', content)
+            concise_context = content[:cutoff.start()] if cutoff else content
+            records = re.search(r'\n### Relevant record extracts', concise_context)
+            if records:
+                st.markdown(concise_context[:records.start()].strip())
+                with st.expander('Supporting record extracts'):
+                    st.markdown(concise_context[records.start():].strip())
+            else:
+                st.markdown(concise_context.strip())
+            with st.expander('Full review instructions'):
+                st.markdown(content)
     with right:
         with st.container(key='school_review'):
             ui.section('Review the learning plan' if teacher else 'Verify the school record',
@@ -433,6 +455,7 @@ def review_fields(case: dict):
                                         state='complete' if not message else 'error')
                     if message:
                         st.session_state.review_message = message
+                    st.session_state.focus_epoch += 1
                     st.rerun()
 
 
@@ -451,6 +474,8 @@ def school_active_case():
         st.session_state.school_active = ''
         st.rerun()
     label, note, tone = display_state(case)
+    if case['phase'] != 'complete':
+        ui.scroll_anchor('s360-review', 'school-review-' + case_id + '-' + case['phase'] + '-' + str(st.session_state.focus_epoch))
     ui.section((case.get('student') or 'Student') + ' · ' + ui.case_ref(case),
                ui.local_time(case['created']) + ' · Parent report: ' + LANGUAGE_LABELS[case['report_language']])
     ui.banner(label, note, tone)
@@ -524,8 +549,8 @@ with st.sidebar:
     else:
         st.radio('Parent navigation', ['Ask a question', 'My reports'], key='parent_page', label_visibility='collapsed')
     st.divider()
-    st.markdown('**A clearer picture of learning**')
-    st.caption('Questions grounded in records. Plans guided by teachers. School verification when more evidence is needed.')
+    st.markdown('**School & home, connected.**')
+    st.toggle('Auto-scroll to updates', key='auto_scroll')
     if school and school_authenticated():
         st.divider()
         st.caption('REVIEWER')
@@ -536,8 +561,10 @@ with st.sidebar:
             st.rerun()
     if not school and st.session_state.parent_active:
         st.divider()
-        st.caption('Keep your request URL to return to its response after a school review.')
+        st.caption('Bookmark your request to return later.')
 
+ui.install_motion(st.session_state.auto_scroll)
+ui.anchor('s360-top')
 ui.topbar(school)
 ui.hero(school)
 if connection_error:
@@ -560,3 +587,4 @@ else:
     else:
         parent_question_view()
 ui.footer(school)
+ui.back_to_top()

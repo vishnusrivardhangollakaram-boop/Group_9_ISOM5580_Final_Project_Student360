@@ -4,7 +4,19 @@
 
 Student360 turns a question into a readable progress report, brings school staff in when supporting information is missing, and keeps teacher approval for learning plans. The frontend calls your real Dify app; it does not contain prewritten student answers or select routes based on example names.
 
-The supplied API key and cloud endpoint are already configured in **`.streamlit/secrets.toml`**. Both values live only in that separate server-side configuration file. Change them there for local use, or in **Streamlit Cloud → App settings → Secrets** after deployment. Python source changes are unnecessary.
+Your final API key and `https://api.dify.ai/v1` endpoint are already configured in **`.streamlit/secrets.toml`**. Both values live only in that separate server-side configuration file. Change them there for local use, or in **Streamlit Cloud → App settings → Secrets** after deployment. Python source changes are unnecessary.
+
+### Updated visual edition
+
+The Parent portal now uses a parent/child photo, a compact question form and your actual Christian Education school image. The Teacher/School workspace uses teacher/student imagery, the supplied school photo and a separate navy visual design. Page copy is shorter; detailed explanations and evidence excerpts are in expanders. The final Dify report content is preserved.
+
+Smooth auto-scroll moves to a newly submitted request, an opened review, and a completed report. It runs once per update rather than on every periodic refresh. It waits while a text input is focused or you are actively scrolling, respects reduced-motion preferences, and can be turned off with **Auto-scroll to updates** in the sidebar. A **Top** button returns to the top of the page.
+
+This version requires **Streamlit 1.65 or newer** for the documented JavaScript-enabled `st.html` enhancement. Upload the updated `requirements.txt` along with the app code. The scroll script is a trusted local asset; questions, reports, API credentials and external content are never injected into executable JavaScript.
+
+For an existing Streamlit deployment, replace the repository’s app files, `assets/` and `requirements.txt` with this ZIP’s contents, update Cloud Secrets with the contents of this ZIP’s `.streamlit/secrets.toml`, and reboot the app after dependencies finish updating. `.streamlit/secrets.toml` remains excluded from GitHub. On a Mac, **Command + Shift + .** reveals the hidden `.streamlit` folder in Finder.
+
+The two people photos are AI-generated decorative images of fictional models. Your supplied school photograph is included unchanged. See `MEDIA_NOTES.md` for asset paths and generation prompts.
 
 ## 1. Start locally
 
@@ -132,7 +144,7 @@ The three student aliases and the unknown-student scenario remain governed by yo
 
 ## 8. Responsiveness and connection recovery
 
-The frontend has one third-party runtime dependency: **Streamlit**. It performs no local embeddings, model loading, image generation or heavy analytics. Branding and icons are small SVG assets; the visual system uses local CSS and system fonts. The design adapts to narrower screens and respects reduced-motion preferences.
+The frontend has one third-party runtime dependency: **Streamlit**. It performs no local embeddings, model loading, runtime image generation or heavy analytics. Branding and icons are small SVG assets; photos are bundled locally and their public image data is cached. The visual system uses local CSS and system fonts. The design adapts to narrower screens and respects reduced-motion preferences.
 
 The live Dify response uses SSE streaming. Only workflow progress is shown before completion; draft model text is not mistaken for an approved report. Parent refreshes read the local inbox every eight seconds, with an API status read throttled to at most once per 30 seconds per active request. School inbox refreshes read local state every ten seconds. API latency is determined by your Dify workflow and models; this UI does not promise a measured speedup.
 
@@ -169,7 +181,12 @@ Student360_Professional/
   README.md                    This guide
   assets/
     style.css                  Professional responsive visual system
+    scroll.js                  Smooth scroll and Top button enhancement
     favicon.svg                Student360 mark
+    parent_child.png           Parent portal photo
+    teacher_students.png       Teacher/School portal photo
+    christian_school.png       Your original school photo
+  MEDIA_NOTES.md               Image origins and final generation prompts
   .streamlit/
     config.toml                Streamlit theme and server settings
     secrets.toml               Your configured connection values; excluded from Git
