@@ -10,10 +10,11 @@ from urllib.request import Request, urlopen
 
 
 class DifyError(RuntimeError):
-    def __init__(self, message: str, status: int | None = None, code: str = ''):
+    def __init__(self, message: str, status: int | None = None, code: str = '', terminal: bool = False):
         super().__init__(message)
         self.status = status
         self.code = code
+        self.terminal = terminal
 
 
 def parse_sse(lines: Iterable[bytes | str]) -> Iterator[dict]:
@@ -56,7 +57,10 @@ class DifyClient:
         text = str(value).replace(self._key, '[redacted]')
         text = re.sub(r'\bapp-[A-Za-z0-9_-]+', '[redacted]', text)
         text = re.sub(r'(?i)Bearer\s+\S+', 'Bearer [redacted]', text)
-        return text[:1000]
+        # Keep the exception tail: provider error codes usually follow the traceback.
+        text = re.sub(r'(?i)(?:AIza[\w-]{20,}|sk-[\w-]{15,})', '[redacted]', text)
+        text = re.sub(r'(?i)([?&](?:key|api_key|token)=)[^&\s]+', r'\1[redacted]', text)
+        return text if len(text) <= 16000 else text[:2000] + '\n…\n' + text[-12000:]
 
     def request(self, method: str, path: str, body: dict | None = None, stream: bool = False):
         headers = {'Authorization': 'Bearer ' + self._key,

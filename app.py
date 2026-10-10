@@ -17,7 +17,7 @@ import streamlit as st
 from config import load_settings
 from dify_client import DifyClient, DifyError
 from store import CaseStore
-from workflow import display_state, execute, refresh_result, rendered_form_content, submit_review
+from workflow import display_state, execute, refresh_result, rendered_form_content, submit_review, failed_run, failure_kind
 import ui
 from i18n import t, language, LANGUAGES, LANGUAGE_LABELS, LANGUAGE_CODES, localize_diagnostic, localize_review_content
 
@@ -81,7 +81,7 @@ ACTION_LABELS = {
     'confirm_existing': 'Confirm existing record', 'use_school_record': 'Use supplied school record',
     'request_records': 'Request missing records',
 }
-FIELD_LABELS = {'final_plan': 'Reviewed plan', 'record_extract': 'Record extract or verified school correction',
+FIELD_LABELS = {'final_plan': 'Reviewed plan', 'record_extract': 'School answer or supplied record',
                 'record_reference': 'Record reference · optional', 'review_note': 'School note · optional'}
 
 
@@ -132,6 +132,71 @@ def reuse_question(case: dict):
     navigate('Ask a question')
 
 
+
+def retry_request(case: dict, school: bool = False):
+    """Explicit new run after a confirmed failure; retain the previous audit trail."""
+    owner = store.acquire(case['id'])
+    if not owner:
+        return
+    fresh = None
+    try:
+        previous = store.get(case['id'])
+        if not failed_run(previous):
+            return
+        fresh = store.get(previous.get('retry_case_id', ''))
+        if fresh is None:
+            fresh = store.create(previous['question'], previous['report_language'], previous.get('student', ''))
+            previous['retry_case_id'] = fresh['id']
+            store.save(previous, owner)
+    finally:
+        store.release(case['id'], owner)
+    if fresh:
+        if school:
+            st.session_state.school_active = fresh['id']
+        else:
+            if fresh['id'] not in st.session_state.parent_cases:
+                st.session_state.parent_cases.append(fresh['id'])
+            activate_parent(fresh)
+        st.session_state.focus_epoch += 1
+        if fresh['phase'] == 'created':
+            run_request(fresh['id'], start=True)
+
+
+def render_recovery(case: dict, school: bool = False):
+    """Friendly actions for parents; bounded diagnostic detail for school staff."""
+    if failed_run(case):
+        st.caption(t('This run has ended. Trying again creates a new request.'))
+        if case.get('review_history'):
+            st.caption(t('Earlier review decisions remain in the school record. A new request requires a new review.'))
+        if client and st.button(t('Try again as a new request'), type='primary', key=('school_' if school else 'parent_') + 'retry_' + case['id'], disabled=store.busy(case['id'])):
+            retry_request(case, school)
+            st.rerun()
+    elif case.get('run_id') and client:
+        if st.button(t('Reconnect to this request'), type='primary', key=('school_' if school else 'parent_') + 'reconnect_' + case['id'], disabled=store.busy(case['id'])):
+            run_request(case['id'])
+            st.rerun()
+    elif not school:
+        st.caption(t('The service did not confirm this request. Ask the school to check its status before sending it again.'))
+        if st.button(t('Use this question again'), type='primary', key='reuse_' + case['id']):
+            reuse_question(case)
+            st.rerun()
+    if school and case.get('error'):
+        reason = case.get('failure_kind') or failure_kind(case['error'], case.get('error_status'))
+        guidance = {
+            'quota': 'Check the model provider quota, billing and rate limits in Dify before retrying.',
+            'access': 'Check Service API access and the model provider credentials in Dify.',
+            'configuration': 'Check the selected model and its supported parameters in the failed Dify node.',
+            'unavailable': 'The model provider is temporarily unavailable. Retry after service is restored.',
+            'model': 'The Dify model plugin failed. Check the failed node in Dify Logs and the provider response below.',
+            'workflow': 'Check the failed node and error details in Dify Logs.',
+        }
+        with st.expander(t('Technical details · school staff')):
+            st.caption(t(guidance[reason]))
+            # Provider errors stay out of the parent portal and do not expand the page.
+            st.code(localize_diagnostic(case['error']), language=None, wrap_lines=True, height=220)
+            if case.get('run_id'):
+                st.caption(t('Workflow ID: {id}', id=case['run_id']))
+
 def auth_digest() -> str:
     return hashlib.sha256(settings.school_access_code.encode('utf-8')).hexdigest()
 
@@ -168,7 +233,7 @@ def run_request(case_id: str, start: bool = False):
                 progress=lambda title: progress.update(label=t(friendly_step(title))))
         case = store.get(case_id)
         label, _, _ = display_state(case)
-        progress.update(label=t(label), state='error' if case['phase'] == 'interrupted' else 'complete')
+        progress.update(label=t(label), state='error' if case['phase'] == 'interrupted' or failed_run(case) else 'complete')
 
 
 def render_report(case: dict, school: bool = False, embedded: bool = False):
@@ -193,6 +258,9 @@ def render_report(case: dict, school: bool = False, embedded: bool = False):
                 reviewer = t('School reviewer') if entry['reviewer'] == 'School reviewer' else entry['reviewer']
                 st.markdown('**' + reviewer + '** · ' + ui.local_time(entry['at']))
                 st.caption(t('Decision: {action}', action=t(ACTION_LABELS.get(entry['action'], entry['action']))))
+                if entry.get('original_plan'):
+                    st.markdown('**' + t('Original AI draft') + '**')
+                    st.text(entry['original_plan'])
                 for key, value in entry.get('inputs', {}).items():
                     if value:
                         st.markdown('**' + t(FIELD_LABELS.get(key, key)) + '**')
@@ -220,7 +288,7 @@ def render_parent_request(case_id: str, embedded: bool = False, refresh: bool = 
         ui.anchor('s360-request')
     if not embedded:
         ui.page_heading(case.get('student') or 'Your request', ui.case_ref(case) + ' · ' + ui.local_time(case['created']), 'YOUR LEARNING CONVERSATION')
-    if case['phase'] == 'interrupted' or (case['phase'] == 'complete' and not embedded):
+    if case['phase'] == 'interrupted' or failed_run(case) or (case['phase'] == 'complete' and not embedded):
         ui.banner(label, note, tone)
     if case['phase'] != 'complete':
         ui.tracker(case)
@@ -236,23 +304,8 @@ def render_parent_request(case_id: str, embedded: bool = False, refresh: bool = 
                        if teacher else 'More supporting information is needed. Your report will update after the school’s review.')
         render_empty(title, description, 'people' if teacher else 'search')
         st.caption(t('This page updates automatically. Bookmark it to return to this request.'))
-    elif case['phase'] == 'interrupted':
-        if case['run_id'] and client:
-            if st.button(t('Reconnect to this request'), type='primary', key='parent_reconnect_' + case_id):
-                run_request(case_id)
-                st.rerun()
-        else:
-            with st.container(key='connection_card'):
-                ui.section('Your question is saved.', 'Once the connection is restored, you can submit it again.')
-                if st.button(t('Use this question again'), type='primary', key='reuse_' + case_id):
-                    reuse_question(case)
-                    st.rerun()
-        with st.expander(t('Connection details')):
-            st.text(localize_diagnostic(case.get('error') or 'The report connection needs attention.'))
-            if case.get('error_status') in {401, 403} or 'connection was denied' in case.get('error', ''):
-                st.caption(t('App owner: enable the Service API in the published Dify app, confirm its app key in Streamlit Secrets, then reboot Streamlit. See README → HTTP 403.'))
-            elif not case.get('run_id'):
-                st.caption(t('No workflow ID was received. Check Dify Logs before resubmitting if the connection timed out; a run may already exist.'))
+    elif case['phase'] == 'interrupted' or failed_run(case):
+        render_recovery(case)
     else:
         render_empty('Your report is being prepared', 'The school workflow is checking the available information. You can keep this page open.', 'clock')
         if case['run_id'] and client and not store.busy(case_id):
@@ -440,7 +493,7 @@ def school_inbox(completed: bool = False):
     elif category == 'Teacher review':
         selected = [c for c in selected if c['phase'] == 'awaiting_review' and c.get('review_kind') == 'teacher']
     elif category == 'Needs attention':
-        selected = [c for c in selected if c['phase'] == 'interrupted']
+        selected = [c for c in selected if c['phase'] == 'interrupted' or failed_run(c)]
     if query.strip():
         q = query.strip().casefold()
         selected = [c for c in selected if q in (c['student'] + ' ' + c['question'] + ' ' + ui.case_ref(c)).casefold()]
@@ -482,12 +535,16 @@ def review_fields(case: dict):
             else:
                 st.markdown(localize_review_content(concise_context.strip()))
             with st.expander(t('Full review instructions')):
-                st.markdown(localize_review_content(content))
+                if teacher:
+                    st.markdown(localize_review_content(content))
+                else:
+                    st.markdown(t('Enter the value or answer for the question shown, confirm it, and choose Use supplied school record. A short answer is accepted; the student and requested information are attached automatically.'))
+                    st.markdown(t('Record reference and school note are optional. Confirm existing record checks an extract already in the available records. Request missing records leaves the question unresolved.'))
             st.caption(t('Original school records and reviewed text are kept in their source language.'))
     with right:
         with st.container(key='school_review'):
             ui.section('Review the learning plan' if teacher else 'Verify the school record',
-                       'Edit the proposed plan before making your decision.' if teacher else 'Provide readable evidence for this student and this question.')
+                       'Edit the proposed plan before making your decision.' if teacher else 'Enter and confirm the school’s answer to this question.')
             if expiry:
                 st.caption(t('Form expires {time}', time=ui.local_time(float(expiry))))
             if expired:
@@ -501,12 +558,11 @@ def review_fields(case: dict):
                 st.error(t('This workflow has an unsupported review field. This UI supports the paragraph fields in the attached final YAML.'))
                 return
             defaults = form.get('resolved_default_values') or {}
-            labels = {'final_plan': 'Reviewed plan', 'record_extract': 'Record extract or verified school correction',
-                      'record_reference': 'Record reference · optional', 'review_note': 'School note · optional'}
+            labels = FIELD_LABELS
             help_text = {'final_plan': 'The exact text you approve is submitted to Dify. Chinese reports translate the reviewed original.',
-                         'record_extract': 'Include the student, exam or subject, date, exact result and its scale. A number alone is insufficient.',
+                         'record_extract': 'Enter the school-confirmed value or answer. The student and requested information are included automatically.',
                          'record_reference': 'Leave blank if unavailable. This is optional for every action.',
-                         'review_note': 'Optional context for the school review; this does not replace the readable record.'}
+                         'review_note': 'Optional context for the school’s answer.'}
             values = {}
             with st.container(key='review_' + case['id']):
                 for field in fields:
@@ -525,7 +581,7 @@ def review_fields(case: dict):
                             key='field_' + case['form_token'] + '_' + name)
                 attested = True
                 if not teacher:
-                    attested = st.checkbox(t('I checked this record against the school’s source and confirm it belongs to this student.'),
+                    attested = st.checkbox(t('I confirm this is the school’s answer for this student and question.'),
                                            help=t('Required when confirming an existing record or using a supplied school record.'), key='attest_' + case['form_token'])
                     st.caption(t('The supplied record supports this request. It does not update the stored knowledge base.'))
                 actions = form.get('user_actions') or []
@@ -539,8 +595,10 @@ def review_fields(case: dict):
             if selected_action:
                 if selected_action == 'approve_plan' and not str(values.get('final_plan') or '').strip():
                     st.warning(t('Enter the reviewed plan before approving it.'))
+                elif selected_action == 'use_school_record' and not str(values.get('record_extract') or '').strip():
+                    st.warning(t('Enter the school’s answer, or choose Request missing records.'))
                 elif selected_action in {'confirm_existing', 'use_school_record'} and not attested:
-                    st.warning(t('Confirm that you checked the school source before accepting this evidence.'))
+                    st.warning(t('Confirm the school’s answer before submitting it.'))
                 else:
                     with st.status(t('Submitting your decision…'), expanded=False) as progress:
                         message = submit_review(client, store, case['id'], case['form_token'], values, selected_action,
@@ -571,8 +629,7 @@ def school_active_case():
     label, note, tone = display_state(case)
     if case['phase'] != 'complete':
         ui.scroll_anchor('s360-review', 'school-review-' + case_id + '-' + case['phase'] + '-' + str(st.session_state.focus_epoch))
-    ui.section((case.get('student') or 'Student') + ' · ' + ui.case_ref(case),
-               ui.local_time(case['created']) + ' · ' + t('Parent report: {language}', language=LANGUAGE_LABELS[case['report_language']]))
+    ui.request_heading(case, label, tone, school=True)
     ui.banner(label, note, tone)
     if st.session_state.get('review_message'):
         st.warning(localize_diagnostic(st.session_state.pop('review_message')))
@@ -580,24 +637,20 @@ def school_active_case():
         render_report(case, school=True)
     elif case['phase'] == 'awaiting_review' and case.get('form'):
         if case.get('error'):
-            st.warning(localize_diagnostic(case['error']))
+            st.warning(t('The review form is still available. Check your input and submit your decision.'))
         review_fields(case)
     else:
         st.markdown('**' + t('Parent’s question') + '**')
         st.write(case['question'])
-        if case.get('error'):
-            with st.expander(t('Connection details'), expanded=True):
-                st.text(localize_diagnostic(case['error']))
-                if case.get('error_status') in {401, 403} or 'connection was denied' in case['error']:
-                    st.caption(t('App owner: check Dify → this app → API Access / Access API. Enable the Service API and use an app key issued for this published Workflow app. Update Streamlit Secrets and reboot after a key change.'))
         if store.busy(case_id):
             st.info(t('The workflow is processing this request. Refresh shortly to see its new state.'))
-        elif case['run_id'] and client:
-            if st.button(t('Reconnect / collect latest response'), type='primary'):
+        elif case['phase'] == 'awaiting_review' and case.get('form_token'):
+            st.info(t('The request is waiting for review. Load its form to continue.'))
+            if client and st.button(t('Load review form'), type='primary'):
                 run_request(case_id)
                 st.rerun()
         else:
-            st.caption(t('No workflow ID was received. Restore API access first. The parent can then reuse their saved question.'))
+            render_recovery(case, school=True)
     with st.expander(t('Workflow activity')):
         st.caption(t('Workflow ID: {id}', id=case['run_id'] or t('Not received')))
         for event in case.get('events', []):
@@ -627,6 +680,8 @@ def header(school: bool):
             with st.popover(t('Options'), width='stretch'):
                 st.toggle(t('Auto-scroll to updates'), key='auto_scroll')
                 if school and school_authenticated():
+                    if not settings.school_access_code:
+                        st.caption(t('Demonstration workspace'))
                     reviewer = st.text_input(t('Reviewer name'), value=st.session_state.reviewer_name,
                                              key='reviewer_editor', max_chars=80)
                     st.session_state.reviewer_name = reviewer.strip()
@@ -657,19 +712,18 @@ if connection_error:
     st.error(localize_diagnostic(connection_error))
     st.caption(t('See the README to configure the separate connection file or Streamlit Cloud Secrets.'))
 
-if school:
-    if not school_authenticated():
-        school_login()
+with st.container(key='page_surface'):
+    if school:
+        if not school_authenticated():
+            school_login()
+        else:
+            if not school_active_case():
+                ui.school_header(st.session_state.reviewer_name)
+                school_inbox(completed=st.session_state.school_page == 'Completed reports')
     else:
-        if not settings.school_access_code:
-            st.info(t('The school workspace is open for demonstration. Set SCHOOL_ACCESS_CODE to require staff access.'))
-        if not school_active_case():
-            ui.school_header(st.session_state.reviewer_name)
-            school_inbox(completed=st.session_state.school_page == 'Completed reports')
-else:
-    if st.session_state.parent_page == 'My reports':
-        parent_history_view()
-    else:
-        parent_question_view()
+        if st.session_state.parent_page == 'My reports':
+            parent_history_view()
+        else:
+            parent_question_view()
 ui.footer(school)
 ui.back_to_top()

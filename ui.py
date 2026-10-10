@@ -48,6 +48,8 @@ def css(school: bool = False):
     style = (ROOT / 'assets' / 'style.css').read_text(encoding='utf-8')
     tokens = ('--ink:#17283f;--muted:#56677d;--accent:#345bb2;--accent-deep:#172d50;--accent-tint:#eef2fc;--canvas:#f5f6fa;--line:#e2e6ef;'
               if school else '--ink:#172d39;--muted:#566b76;--accent:#147d74;--accent-deep:#123c42;--accent-tint:#edf7f5;--canvas:#f8fafb;--line:#e2e9ec;')
+    photo = asset_uri('christian_school.png' if school else 'parent_portrait.png')
+    tokens += '--page-photo:url("' + photo + '");'
     st.html('<style>' + style + '</style><style>:root{' + tokens + '}</style>')
 
 
@@ -99,10 +101,12 @@ def request_preview(case: dict):
     st.html(f'<div class="request-preview"><div class="request-preview-top"><span class="student-monogram">{escape(monogram)}</span><h3>{escape(name)}</h3></div><p class="request-date">{escape(local_time(case["created"], True))}</p><p class="request-question">{escape(case["question"])}</p></div>')
 
 
-def request_heading(case: dict, label: str, tone: str):
+def request_heading(case: dict, label: str, tone: str, school: bool = False):
     name = case.get('student') or t('Your request')
     details = case_ref(case) + ' · ' + local_time(case['created'])
-    st.html(f'<header class="request-heading"><div><h2>{escape(name)}</h2><p>{escape(details)}</p></div><span class="badge tone-{tone}" role="status"><span></span>{escape(t(label))}</span></header>')
+    photo = asset_uri('christian_school.png' if school else 'parent_portrait.png')
+    kicker = t('TEACHER & SCHOOL' if school else 'YOUR CHILD’S LEARNING')
+    st.html(f'<header class="request-heading"><div class="request-heading-copy"><div class="eyebrow">{escape(kicker)}</div><h2>{escape(name)}</h2><p>{escape(details)}</p><span class="badge tone-{tone}" role="status"><span></span>{escape(t(label))}</span></div><img class="request-heading-photo" src="{photo}" alt="{escape(t("Christian Education" if school else "Parent and child learning together"))}"/></header>')
 
 
 def section(title: str, caption: str = '', kicker: str = ''):
@@ -138,7 +142,7 @@ def case_ref(case: dict) -> str:
 def tracker(case: dict):
     """Only show a review stage when this request actually entered human review."""
     phase = case['phase']
-    if phase == 'interrupted' and not case.get('run_id'):
+    if phase in {'interrupted', 'failed'}:
         return
     complete, reviewing = phase == 'complete', phase == 'awaiting_review'
     reviewed = bool(case.get('review_history')) or case.get('metadata', {}).get('review_status') in {'teacher_approved', 'staff_confirmed', 'not_approved', 'timed_out'}
