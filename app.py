@@ -21,7 +21,7 @@ from workflow import display_state, execute, refresh_result, rendered_form_conte
 import ui
 
 st.set_page_config(page_title='Student360 | Progress & support', page_icon=str(ui.ROOT / 'assets' / 'favicon.svg'),
-                   layout='wide', initial_sidebar_state='expanded',
+                   layout='wide', initial_sidebar_state='collapsed',
                    menu_items={'Get Help': None, 'Report a bug': None, 'About': 'Student360 · Record-based progress answers and human-reviewed learning plans.'})
 
 LANGUAGES = ['English', 'Chinese (Simplified) 简体中文', 'Chinese (Traditional) 繁體中文']
@@ -75,9 +75,29 @@ if public_token:
             st.session_state.parent_cases.append(restored['id'])
 
 
-def portal_changed():
-    st.query_params['view'] = 'school' if st.session_state.portal == 'Teacher / School' else 'parent'
+def select_portal(portal: str):
+    st.session_state.portal = portal
+    st.query_params['view'] = 'school' if portal == 'Teacher / School' else 'parent'
     st.session_state.focus_epoch += 1
+
+
+def navigate(page: str, school: bool = False):
+    if school:
+        st.session_state.school_page = page
+        st.session_state.school_active = ''
+    else:
+        st.session_state.parent_page = page
+        if page == 'Ask a question':
+            st.session_state.parent_active = ''
+            st.query_params.pop('request', None)
+    st.session_state.focus_epoch += 1
+
+
+def sign_out():
+    st.session_state.school_auth = ''
+    st.session_state.school_active = ''
+    st.session_state.reviewer_name = ''
+    st.session_state.pop('reviewer_editor', None)
 
 
 def choose_example(name: str, question: str):
@@ -139,22 +159,18 @@ def run_request(case_id: str, start: bool = False):
 def render_report(case: dict, school: bool = False):
     ui.scroll_anchor('s360-report', ('school-report-' if school else 'parent-report-') + case['id'] + '-' + str(st.session_state.focus_epoch))
     with st.container(key='report_card'):
-        head, download = st.columns([3, 2], vertical_alignment='center')
-        with head:
-            ui.section('Student Progress Report', ui.case_ref(case) + ' · ' + ui.local_time(case['created']))
-        with download:
-            ui.badge(LANGUAGE_LABELS.get(case['report_language'], case['report_language']))
-        st.markdown(ui.report_body(case['report']))
-        st.divider()
-        md, printable = st.columns(2)
+        head, download = st.columns([4, 1.5], vertical_alignment='center')
         file_stub = 'Student360_' + re.sub(r'[^A-Za-z0-9_-]', '_', case.get('student') or 'Report') + '_' + case['id'][:8]
-        with md:
-            st.download_button('Download report · Markdown', case['report'].encode('utf-8'),
-                               file_name=file_stub + '.md', mime='text/markdown', width='stretch', key='md_' + case['id'])
-        with printable:
-            st.download_button('Download printable report', ui.printable_report(case),
-                               file_name=file_stub + '.html', mime='text/html', width='stretch', key='print_' + case['id'])
-        st.caption('Printable report → Print → Save as PDF.')
+        with head:
+            ui.section('Student progress report', ui.case_ref(case) + ' · ' + ui.local_time(case['created']))
+        with download:
+            with st.popover('Download report', width='stretch'):
+                st.download_button('Printable report', ui.printable_report(case), file_name=file_stub + '.html',
+                                   mime='text/html', width='stretch', key='print_' + case['id'])
+                st.download_button('Markdown file', case['report'].encode('utf-8'), file_name=file_stub + '.md',
+                                   mime='text/markdown', width='stretch', key='md_' + case['id'])
+                st.caption('Open the printable file → Print → Save as PDF.')
+        st.markdown(ui.report_body(case['report']))
     if school and case.get('review_history'):
         with st.expander('School review record'):
             for i, entry in enumerate(case['review_history']):
@@ -180,26 +196,27 @@ def parent_live_report(case_id: str):
         case = store.get(case_id)
     label, note, tone = display_state(case)
     if case['phase'] != 'complete':
-        ui.scroll_anchor('s360-request', 'parent-request-' + case_id + '-' + case['phase'] + '-' + str(st.session_state.focus_epoch))
+        ui.scroll_anchor('s360-request', 'parent-request-' + case_id + '-' + case['phase'] + '-' + case.get('review_kind', '') + '-' + str(st.session_state.focus_epoch))
     else:
         ui.anchor('s360-request')
-    ui.section('Your latest request', case.get('student') or 'Student progress')
-    ui.banner(label, note, tone)
-    ui.tracker(case)
-    with st.expander('Your question & request details'):
+    ui.page_heading(case.get('student') or 'Your request', 'Your question, its progress, and the completed response.', 'PARENT PORTAL')
+    if case['phase'] in {'complete', 'interrupted'}:
+        ui.banner(label, note, tone)
+    if case['phase'] != 'complete':
+        ui.tracker(case)
+    with st.expander('View your question'):
         st.write(case['question'])
         st.caption(ui.case_ref(case) + ' · ' + ui.local_time(case['created']) + ' · ' + LANGUAGE_LABELS[case['report_language']])
     if case['phase'] == 'complete':
         render_report(case)
     elif case['phase'] == 'awaiting_review':
         teacher = case['review_kind'] == 'teacher'
-        title = 'Your teacher is the next step' if teacher else 'The school will check the record'
-        description = ('Your reviewed plan will appear here after the teacher’s decision.'
+        title = 'Waiting for teacher review' if teacher else 'More evidence is needed'
+        description = ('The response will update here after the teacher’s decision.'
                        if teacher else 'More supporting information is needed. Your report will update after the school’s review.')
         render_empty(title, description, 'people' if teacher else 'search')
-        st.caption('Keep this page open, or bookmark this request.')
+        st.caption('This page updates automatically. Bookmark it to return to this request.')
     elif case['phase'] == 'interrupted':
-        st.warning('We could not complete the connection. Your request has been retained.')
         if case['run_id'] and client:
             if st.button('Reconnect to this request', type='primary', key='parent_reconnect_' + case_id):
                 run_request(case_id)
@@ -216,57 +233,63 @@ def parent_live_report(case_id: str):
                 st.rerun()
 
 
+def question_form():
+    with st.container(key='question_card'):
+        ui.section('What would you like to know?', 'Ask about progress, results or learning support.', 'YOUR QUESTION')
+        with st.form('parent_question_form'):
+            name, language = st.columns([1, 1.3], gap='small')
+            with name:
+                student = st.text_input('Student name', key='student_name', placeholder='e.g. Taylor', max_chars=60,
+                                        help='You can also include the name directly in your question.')
+            with language:
+                selected_language = st.selectbox('Report language', LANGUAGES, key='report_language',
+                                                  format_func=lambda x: LANGUAGE_LABELS[x])
+            question = st.text_area('Your question', key='question', height=150, max_chars=1900,
+                                    placeholder='What is my child doing well? Where could they use a little more support?')
+            submitted = st.form_submit_button('Create progress report  →', type='primary', width='stretch', disabled=not client)
+        if submitted:
+            q = question.strip()
+            if not q:
+                st.warning('Please enter your question.')
+            else:
+                student = student.strip()
+                if student and not re.search(r'\b' + re.escape(student) + r'\b', q, re.I):
+                    q = 'Question about ' + student + ': ' + q
+                names = [n for n in ['Taylor', 'Riley', 'Skyler', 'Vishnu'] if re.search(r'\b' + n + r'\b', q, re.I)]
+                alias = names[0] if len(names) == 1 else student
+                case = store.create(q, selected_language, alias)
+                st.session_state.parent_cases.append(case['id'])
+                activate_parent(case)
+                st.session_state.focus_epoch += 1
+                run_request(case['id'], start=True)
+                st.rerun()
+        st.html('<div class="form-note">' + ui.icon('people',17) + '<span>School or teacher review is requested when needed.</span></div>')
+        with st.expander('Explore with an example'):
+            st.html('<div class="demo-intro">Choose a question, then create its report.</div>')
+            with st.container(key='demo_questions'):
+                for offset in (0, 2):
+                    columns = st.columns(2, gap='small')
+                    for col, (name, topic, prompt) in zip(columns, EXAMPLES[offset:offset+2]):
+                        with col:
+                            st.button(name + ' · ' + topic, key='example_' + name, width='stretch',
+                                      on_click=choose_example, args=(name, prompt))
+
+
 def parent_question_view():
     ui.anchor('s360-question')
-    left, right = st.columns([2.25, 1], gap='large')
-    with left:
-        with st.container(key='question_card'):
-            ui.section('Any question or concern?', 'We are here to help.')
-            with st.form('parent_question_form'):
-                name, language = st.columns([1, 1.3])
-                with name:
-                    student = st.text_input('Student name', key='student_name', placeholder='e.g. Taylor', max_chars=60,
-                                            help='You can also include the student name directly in your question.')
-                with language:
-                    selected_language = st.selectbox('Report language', LANGUAGES, key='report_language',
-                                                      format_func=lambda x: LANGUAGE_LABELS[x])
-                question = st.text_area('Your question', key='question', height=125, max_chars=1900,
-                    placeholder='Ask about progress, an exam result or a support plan…')
-                st.caption('Include the exam or date when relevant.')
-                submitted = st.form_submit_button('Get my progress report', type='primary', width='stretch', disabled=not client)
-            if submitted:
-                q = question.strip()
-                if not q:
-                    st.warning('Please enter a question or concern.')
-                else:
-                    student = student.strip()
-                    # Dify has question + report_language inputs, not a separate student variable.
-                    # Incorporate the optional name without hiding another name in the question.
-                    if student and not re.search(r'\b' + re.escape(student) + r'\b', q, re.I):
-                        q = 'Question about ' + student + ': ' + q
-                    names = [n for n in ['Taylor', 'Riley', 'Skyler', 'Vishnu'] if re.search(r'\b' + n + r'\b', q, re.I)]
-                    alias = names[0] if len(names) == 1 else student
-                    case = store.create(q, selected_language, alias)
-                    st.session_state.parent_cases.append(case['id'])
-                    activate_parent(case)
-                    st.session_state.focus_epoch += 1
-                    run_request(case['id'], start=True)
-                    st.rerun()
-        with st.expander('Try a demo question'):
-            for name, topic, question in EXAMPLES:
-                st.button(name + ' · ' + topic, key='example_' + name, width='stretch',
-                          on_click=choose_example, args=(name, question))
-    with right:
-        ui.school_card()
-        ui.process_strip()
-        with st.expander('How your report is prepared'):
-            st.markdown('1. Check the student’s records.\n2. Ask the school or teacher to review when needed.\n3. Share the completed report in your chosen language.')
     if st.session_state.parent_active:
         parent_live_report(st.session_state.parent_active)
+        return
+    with st.container(key='parent_landing'):
+        story, form = st.columns([1.12, 1], gap='large')
+        with story:
+            ui.landing_story()
+        with form:
+            question_form()
 
 
 def parent_history_view():
-    ui.section('My reports', 'Your questions. Your completed responses.')
+    ui.page_heading('Your learning conversations.', 'Requests from this browser session, together in one place.', 'MY REPORTS')
     cases = [store.get(i) for i in reversed(st.session_state.parent_cases)]
     cases = [c for c in cases if c]
     if not cases:
@@ -275,46 +298,58 @@ def parent_history_view():
     for case in cases:
         label, _, tone = display_state(case)
         with st.container(key='case_card_parent_' + case['id']):
-            copy, action = st.columns([4, 1], vertical_alignment='center')
+            copy, state, action = st.columns([3.7, 1.8, 1], vertical_alignment='center')
             with copy:
-                st.html(f'<div class="mini-label">{escape(ui.case_ref(case))} · {escape(ui.local_time(case["created"],True))}</div><div class="case-title">{escape(case.get("student") or "Student progress")}</div><div class="case-question">{escape(case["question"])}</div>')
+                case_summary(case)
+            with state:
                 ui.badge(label, tone)
             with action:
-                st.button('Open report', key='open_parent_' + case['id'], width='stretch',
+                st.button('Open →', key='open_parent_' + case['id'], width='stretch',
                           on_click=open_parent_report, args=(case,))
 
 
 def school_login():
-    school_photo, login = st.columns([1, 1.5], gap='large')
-    with school_photo:
-        ui.school_card(compact=True)
+    story, login = st.columns([1.12, 1], gap='large')
+    with story:
+        ui.landing_story(school=True)
     with login, st.container(key='login_card'):
-        ui.section('School workspace', 'Enter your school access code.')
+        ui.section('Open your workspace.', 'Use your school access code to continue.', 'STAFF ACCESS')
         with st.form('school_login'):
-            code = st.text_input('School access code', type='password', placeholder='Enter your access code')
-            reviewer = st.text_input('Your name', placeholder='e.g. Ms. Chen', help='Included in this app’s review record.')
-            submitted = st.form_submit_button('Open review workspace', type='primary', width='stretch')
+            reviewer = st.text_input('Your name', placeholder='e.g. Ms. Chen', max_chars=80,
+                                    help='Included with your decisions in the school review record.')
+            code = st.text_input('School access code', type='password', placeholder='Enter your school access code')
+            submitted = st.form_submit_button('Open school workspace  →', type='primary', width='stretch')
         if submitted:
-            if hmac.compare_digest(code, settings.school_access_code):
+            if hmac.compare_digest(code.encode('utf-8'), settings.school_access_code.encode('utf-8')):
                 st.session_state.school_auth = auth_digest()
                 st.session_state.reviewer_name = reviewer.strip() or 'School reviewer'
+                st.session_state.pop('reviewer_editor', None)
                 st.session_state.focus_epoch += 1
                 st.rerun()
             else:
                 st.error('The school access code did not match.')
-        st.caption('For teachers and school reviewers.')
+        st.html('<div class="form-note">' + ui.icon('lock',16) + '<span>For teachers and school reviewers.</span></div>')
+
+
+def case_summary(case: dict, kind: str = ''):
+    name = case.get('student') or 'Student progress'
+    monogram = ''.join(word[0] for word in name.split()[:2]).upper()
+    kind_html = '<small>' + escape(kind) + '</small>' if kind else ''
+    st.html(f'<div class="case-copy"><span class="student-monogram">{escape(monogram)}</span><div class="case-content"><div class="mini-label">{escape(ui.case_ref(case))} · {escape(ui.local_time(case["created"], True))}</div><div class="case-title">{escape(name)}{kind_html}</div><div class="case-question">{escape(case["question"])}</div></div></div>')
 
 
 def school_case_card(case: dict):
     label, _, tone = display_state(case)
     with st.container(key='case_card_school_' + case['id']):
-        copy, action = st.columns([4, 1], vertical_alignment='center')
+        copy, state, action = st.columns([3.7, 1.8, 1.1], vertical_alignment='center')
         with copy:
-            kind = 'Plan approval' if case.get('review_kind') == 'teacher' else 'Record verification'
-            st.html(f'<div class="mini-label">{escape(ui.case_ref(case))} · {escape(ui.local_time(case["created"],True))}</div><div class="case-title">{escape(case.get("student") or "Student progress")} <span style="font-size:11px;font-weight:450;color:#8392a4">/ {escape(kind)}</span></div><div class="case-question">{escape(case["question"])}</div>')
+            has_review = case['phase'] == 'awaiting_review' or bool(case.get('review_history'))
+            kind = ('Learning plan' if case.get('review_kind') == 'teacher' else 'School evidence') if has_review else 'Progress response'
+            case_summary(case, kind)
+        with state:
             ui.badge(label, tone)
         with action:
-            button = 'Review request' if case['phase'] == 'awaiting_review' else 'Open request'
+            button = 'Review →' if case['phase'] == 'awaiting_review' else 'Open →'
             if st.button(button, key='open_school_' + case['id'], width='stretch', type='primary' if case['phase'] == 'awaiting_review' else 'secondary'):
                 st.session_state.school_active = case['id']
                 st.session_state.focus_epoch += 1
@@ -332,19 +367,21 @@ def school_inbox(completed: bool = False):
     finished = [c for c in cases if c['phase'] == 'complete']
     a, b, c = st.columns(3)
     with a:
-        ui.stat('Record verification', len(record_cases), 'Awaiting school evidence', 'search', 'amber')
+        ui.stat('School evidence', len(record_cases), 'awaiting review', 'search', 'amber')
     with b:
-        ui.stat('Teacher decisions', len(teacher_cases), 'Plans awaiting review', 'people', 'purple')
+        ui.stat('Learning plans', len(teacher_cases), 'awaiting a decision', 'people', 'purple')
     with c:
-        ui.stat('Completed responses', len(finished), 'Ready to read', 'file', 'green')
+        ui.stat('Completed', len(finished), 'responses ready', 'file', 'green')
     ui.section('Completed reports' if completed else 'Review inbox',
-               'Reports and review history.' if completed else 'Check the evidence. Review the plan. Make your decision.')
-    search, filter_col = st.columns([2, 1])
+               'Completed responses and their review records.' if completed else 'The next step starts with your review.')
+    search, filter_col = st.columns([3, 1.5])
     with search:
         query = st.text_input('Find a request', placeholder='Search student, question or request reference', key='school_search_' + str(completed))
     with filter_col:
-        filters = ['All completed'] if completed else ['All active', 'Record verification', 'Teacher review', 'Needs attention']
-        category = st.selectbox('Show', filters, key='school_filter_' + str(completed))
+        if completed:
+            category = 'All completed'
+        else:
+            category = st.selectbox('Request type', ['All active', 'Record verification', 'Teacher review', 'Needs attention'], key='school_filter_active')
     selected = finished if completed else [c for c in cases if c['phase'] != 'complete']
     if category == 'Record verification':
         selected = [c for c in selected if c['phase'] == 'awaiting_review' and c.get('review_kind') != 'teacher']
@@ -353,13 +390,17 @@ def school_inbox(completed: bool = False):
     elif category == 'Needs attention':
         selected = [c for c in selected if c['phase'] == 'interrupted']
     if query.strip():
-        q = query.casefold()
+        q = query.strip().casefold()
         selected = [c for c in selected if q in (c['student'] + ' ' + c['question'] + ' ' + ui.case_ref(c)).casefold()]
     if not selected:
-        render_empty('No completed reports yet' if completed else 'The inbox is clear',
-                     'Completed responses will be available here after the workflow finishes.' if completed else 'A parent request appears here when it needs school verification or a teacher decision.', 'check')
+        filtered = bool(query.strip()) or category not in {'All active', 'All completed'}
+        if filtered:
+            render_empty('No matching requests', 'Try another name, request reference or filter.', 'search')
+        else:
+            render_empty('No completed reports yet' if completed else 'You’re all caught up.',
+                         'Completed responses will appear here.' if completed else 'Requests appear here when the workflow needs school evidence or a teacher’s decision.', 'check')
     else:
-        st.caption(str(len(selected)) + ' request' + ('s' if len(selected) != 1 else '') + ' · Inbox updates automatically while open')
+        st.caption(str(min(len(selected), 50)) + ' of ' + str(len(selected)) + ' matching requests · Updates automatically')
         for case in selected[:50]:
             school_case_card(case)
         if len(selected) > 50:
@@ -436,11 +477,12 @@ def review_fields(case: dict):
                     st.caption('The supplied record supports this request. It does not update the stored knowledge base.')
                 actions = form.get('user_actions') or []
                 selected_action = ''
-                for action in actions:
-                    title = str(action.get('title') or action['id'])
-                    kind = 'primary' if action.get('button_style') == 'primary' else 'secondary'
-                    if st.form_submit_button(title, type=kind, width='stretch', disabled=not client or store.busy(case['id'])):
-                        selected_action = action['id']
+                with st.container(key='review_actions'):
+                    for action in actions:
+                        title = str(action.get('title') or action['id'])
+                        kind = 'primary' if action.get('button_style') == 'primary' else 'secondary'
+                        if st.form_submit_button(title, type=kind, width='stretch', disabled=not client or store.busy(case['id'])):
+                            selected_action = action['id']
             if selected_action:
                 if selected_action == 'approve_plan' and not str(values.get('final_plan') or '').strip():
                     st.warning('Enter the reviewed plan before approving it.')
@@ -470,7 +512,7 @@ def school_active_case():
     if client:
         refresh_result(client, store, case_id)
         case = store.get(case_id)
-    if st.button('← Back to review inbox', key='back_inbox'):
+    if st.button('← Back to requests', key='back_inbox'):
         st.session_state.school_active = ''
         st.rerun()
     label, note, tone = display_state(case)
@@ -511,75 +553,59 @@ def school_active_case():
     return True
 
 
-def school_connection_view():
-    with st.container(key='school_context'):
-        ui.section('Connection & workspace', 'Connection settings are read on the server from the separate secrets configuration.')
-        st.markdown('**Published workflow** · Student360')
-        st.caption('Inputs: question, report_language · Output: student_progress_report')
-        st.caption('The API key is never displayed in this workspace.')
-        if client and st.button('Check Dify connection', type='primary'):
-            try:
-                info = client.info()
-                if info.get('mode') != 'workflow':
-                    st.error('This key belongs to another app type. Use the Student360 Workflow app key.')
-                else:
-                    st.success('Connected to ' + str(info.get('name') or 'the published workflow'))
-            except DifyError as exc:
-                st.error(client.redact(exc))
-        st.divider()
-        st.markdown('**Workspace storage**')
-        st.write('Requests are shared between browsers connected to this Streamlit instance. Local request storage is temporary on Streamlit Community Cloud.')
-        st.caption('Export completed reports or review records before redeploying. See README for the deployment and persistence details.')
-        st.markdown('**School access**')
-        st.write('The shared school access code controls the review workspace. Reviewer names are entered by staff and are recorded with their decisions.')
+def header(school: bool):
+    with st.container(key='app_header'):
+        logo, parent_tab, school_tab, options = st.columns([3.2, 1.05, 1.55, .9], gap='small', vertical_alignment='center')
+        with logo:
+            ui.brand()
+        with parent_tab:
+            st.button('Parent', key='mode_parent', type='secondary' if school else 'primary', width='stretch',
+                      on_click=select_portal, args=('Parent',))
+        with school_tab:
+            st.button('Teacher / School', key='mode_school', type='primary' if school else 'secondary', width='stretch',
+                      on_click=select_portal, args=('Teacher / School',))
+        with options:
+            with st.popover('Options', width='stretch'):
+                st.toggle('Auto-scroll to updates', key='auto_scroll')
+                if school and school_authenticated():
+                    reviewer = st.text_input('Reviewer name', value=st.session_state.reviewer_name,
+                                             key='reviewer_editor', max_chars=80)
+                    st.session_state.reviewer_name = reviewer.strip()
+                    if settings.school_access_code:
+                        st.button('Sign out', on_click=sign_out, width='stretch')
+    if not school or school_authenticated():
+        with st.container(key='view_nav'):
+            first, second, space = st.columns([1.35, 1.6, 5], gap='small', vertical_alignment='center')
+            pages = ['Review inbox', 'Completed reports'] if school else ['Ask a question', 'My reports']
+            active = st.session_state.school_page if school else st.session_state.parent_page
+            for col, page in zip([first, second], pages):
+                with col:
+                    title = 'New question' if page == 'Ask a question' else page
+                    st.button(title, key='nav_' + page.replace(' ', '_'), width='stretch',
+                              type='primary' if active == page else 'secondary',
+                              on_click=navigate, args=(page, school))
+            with space:
+                label = 'School workspace' if school else 'Parent portal'
+                st.html('<div class="nav-context">' + ui.icon('school' if school else 'people',15) + escape(label) + '</div>')
 
 
 school = st.session_state.portal == 'Teacher / School'
 ui.css(school)
-with st.sidebar:
-    ui.brand(sidebar=True)
-    st.caption('YOUR WORKSPACE')
-    st.radio('Choose workspace', ['Parent', 'Teacher / School'], key='portal',
-             label_visibility='collapsed', on_change=portal_changed)
-    st.divider()
-    st.caption('NAVIGATION')
-    if school:
-        st.radio('School navigation', ['Review inbox', 'Completed reports', 'Connection & workspace'],
-                 key='school_page', label_visibility='collapsed')
-    else:
-        st.radio('Parent navigation', ['Ask a question', 'My reports'], key='parent_page', label_visibility='collapsed')
-    st.divider()
-    st.markdown('**School & home, connected.**')
-    st.toggle('Auto-scroll to updates', key='auto_scroll')
-    if school and school_authenticated():
-        st.divider()
-        st.caption('REVIEWER')
-        st.text_input('Reviewer name', key='reviewer_name', placeholder='Your name', label_visibility='collapsed')
-        if settings.school_access_code and st.button('Sign out of school view', width='stretch'):
-            st.session_state.school_auth = ''
-            st.session_state.school_active = ''
-            st.rerun()
-    if not school and st.session_state.parent_active:
-        st.divider()
-        st.caption('Bookmark your request to return later.')
-
+ui.scroll_anchor('s360-top', 'page-' + st.session_state.portal + '-' + str(st.session_state.focus_epoch))
+header(school)
 ui.install_motion(st.session_state.auto_scroll)
-ui.anchor('s360-top')
-ui.topbar(school)
-ui.hero(school)
 if connection_error:
     st.error(connection_error)
-    st.caption('The README explains how to configure the separate connection file and Streamlit Cloud Secrets.')
+    st.caption('See the README to configure the separate connection file or Streamlit Cloud Secrets.')
 
 if school:
     if not school_authenticated():
         school_login()
     else:
         if not settings.school_access_code:
-            st.info('Demonstration access: the school workspace is open. Set SCHOOL_ACCESS_CODE for shared access control.')
-        if st.session_state.school_page == 'Connection & workspace':
-            school_connection_view()
-        elif not school_active_case():
+            st.info('The school workspace is open for demonstration. Set SCHOOL_ACCESS_CODE to require staff access.')
+        if not school_active_case():
+            ui.school_header(st.session_state.reviewer_name)
             school_inbox(completed=st.session_state.school_page == 'Completed reports')
 else:
     if st.session_state.parent_page == 'My reports':

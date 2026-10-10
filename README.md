@@ -6,17 +6,23 @@ Student360 turns a question into a readable progress report, brings school staff
 
 Your final API key and `https://api.dify.ai/v1` endpoint are already configured in **`.streamlit/secrets.toml`**. Both values live only in that separate server-side configuration file. Change them there for local use, or in **Streamlit Cloud → App settings → Secrets** after deployment. Python source changes are unnecessary.
 
-### Updated visual edition
+### The redesigned interface
 
-The Parent portal now uses a parent/child photo, a compact question form and your actual Christian Education school image. The Teacher/School workspace uses teacher/student imagery, the supplied school photo and a separate navy visual design. Page copy is shorter; detailed explanations and evidence excerpts are in expanders. The final Dify report content is preserved.
+The attached TaleTwinkle reference informed the cohesive use of imagery, colour and controls. Student360 has been rebuilt as a professional school portal:
 
-Smooth auto-scroll moves to a newly submitted request, an opened review, and a completed report. It runs once per update rather than on every periodic refresh. It waits while a text input is focused or you are actively scrolling, respects reduced-motion preferences, and can be turned off with **Auto-scroll to updates** in the sidebar. A **Top** button returns to the top of the page.
+- **Parent:** warm ivory and forest green, a parent/child photograph alongside the question form, and a focused page for the active request and final report.
+- **Teacher / School:** navy styling, teacher/student imagery alongside the supplied Christian Education school photo, an access-code entry page, a compact review inbox and side-by-side evidence and decision panels.
+- **Navigation:** use **Parent** and **Teacher / School** at the top. **New question**, **My reports**, **Review inbox** and **Completed reports** open implemented pages. **Options** contains auto-scroll, reviewer name and staff sign-out.
+- **Reports:** one **Download report** menu offers printable HTML and Markdown. Native buttons, forms and menus retain keyboard interaction. Narrow-screen layouts stack the main panels.
+- **Workflow states:** counts come from stored requests. Decisions come from the live Dify form. An automatic answer is labelled as a progress response. The tracker includes human review only when that request actually enters review.
 
-This version requires **Streamlit 1.65 or newer** for the documented JavaScript-enabled `st.html` enhancement. Upload the updated `requirements.txt` along with the app code. The scroll script is a trusted local asset; questions, reports, API credentials and external content are never injected into executable JavaScript.
+The earlier sidebar, repeated hero banners, diagram strip and technical connection page have been removed. There are no decorative notifications, fabricated scores, inactive menu items, scheduling controls or upload controls. Detailed instructions and demonstration questions are in expanders.
 
-For an existing Streamlit deployment, replace the repository’s app files, `assets/` and `requirements.txt` with this ZIP’s contents, update Cloud Secrets with the contents of this ZIP’s `.streamlit/secrets.toml`, and reboot the app after dependencies finish updating. `.streamlit/secrets.toml` remains excluded from GitHub. On a Mac, **Command + Shift + .** reveals the hidden `.streamlit` folder in Finder.
+**Auto-scroll** moves to a new request, an opened review and a completed response. It waits while you type or scroll manually, respects reduced-motion preferences, and can be disabled in **Options**. The **Top** button returns to the beginning. Periodic refreshes do not repeatedly move the page.
 
-The two people photos are AI-generated decorative images of fictional models. Your supplied school photograph is included unchanged. See `MEDIA_NOTES.md` for asset paths and generation prompts.
+Dependencies are pinned to **Streamlit 1.65.0**. The trusted local scroll script uses `st.html(..., unsafe_allow_javascript=True)`. User questions, reports and credentials are never passed into executable JavaScript. Images are bundled locally. The people photographs depict fictional models; your supplied school photograph is included unchanged. See `MEDIA_NOTES.md`.
+
+**Updating an existing deployment:** replace the repository’s Python files, `assets/`, `requirements.txt` and `.streamlit/config.toml` with this package. Copy the delivered `.streamlit/secrets.toml` into **Streamlit → App settings → Secrets**, save, and reboot the app. Keep that credentials file out of GitHub. On macOS, **Command + Shift + .** reveals `.streamlit` in Finder; on Windows, enable **View → Show → Hidden items** if needed.
 
 ## 1. Start locally
 
@@ -31,7 +37,7 @@ streamlit run app.py
 
 On Windows, activate with `.venv\Scripts\activate` instead. Open the local URL printed by Streamlit, usually `http://localhost:8501`.
 
-The Parent portal opens first. The sidebar switches to the Teacher/School workspace. The initial school access code is **`Student360-Review`**; change `SCHOOL_ACCESS_CODE` in the same secrets file when sharing the app. Staff enter a display name; the app records that name with each decision.
+The Parent portal opens first. The top navigation switches to the Teacher/School workspace. The initial school access code is **`Student360-Review`**; change `SCHOOL_ACCESS_CODE` in the same secrets file when sharing the app. Staff enter a display name; the app records that name with each decision.
 
 ## 2. Deploy on Streamlit Community Cloud
 
@@ -40,7 +46,7 @@ The Parent portal opens first. The sidebar switches to the Teacher/School worksp
 3. Go to [Streamlit Community Cloud](https://share.streamlit.io), choose **Create app**, and select your repository and branch.
 4. Set **Main file path** to **`app.py`**. If you uploaded the entire enclosing folder instead of its contents, use `Student360_Professional/app.py`.
 5. Open **Advanced settings**, choose Python **3.11 or a newer supported version**, and paste the complete contents of your delivered `.streamlit/secrets.toml` into **Secrets**.
-6. Deploy. The resulting `*.streamlit.app` URL opens the Parent portal. The Teacher/School workspace is available from the sidebar; `?view=school` can open that view directly.
+6. Deploy. The resulting `*.streamlit.app` URL opens the Parent portal. The Teacher/School workspace is available from the top navigation; `?view=school` can open that view directly.
 
 After deployment, use **App settings → Secrets** whenever you change the API key, endpoint or school access code. Save the changes and restart/reboot the app if the current browser has an older configuration. For a local connection-file edit, save the file and rerun or restart Streamlit.
 
@@ -78,24 +84,24 @@ The app reads the final `student_progress_report` instead of the older `answer` 
 
 ## 4. Parent experience
 
-- A calm teal portal with a clear question form, student name and report language.
+- A warm ivory and forest-green portal with a focused question form, student name and report language.
 - Honest progress states: preparing, school verification, teacher review, completed response or connection attention.
-- A request timeline and final report with the backend’s sources and review wording.
+- A request tracker and final report with the backend’s sources and review wording. Human review appears in the tracker only when it occurs.
 - **My reports** for requests from the current browser session.
-- Markdown and printable HTML downloads. Open the printable HTML in a browser and choose **Print → Save as PDF** to export a PDF.
+- A **Download report** menu with Markdown and printable HTML downloads. Open the printable HTML in a browser and choose **Print → Save as PDF** to export a PDF.
 - A private request URL, saved in the browser address bar, for returning after a review or browser refresh. Treat that URL as access to its report.
 
 Parents cannot submit teacher approvals or school evidence from their portal. Switching to the Teacher/School workspace requires the configured school access code.
 
 ## 5. Teacher/School experience
 
-- A navy workspace with a shared review inbox, search, filters and real request counts.
+- A navy workspace with a shared review inbox, search, filters and actual request counts.
 - Separate school evidence and teacher plan-review forms.
 - An access-code gate, reviewer display name and school-only review history.
 - Record context from the live Dify form, not a reconstructed frontend prompt.
 - Editable teacher plan prefilled with Dify’s `resolved_default_values`.
 - Decisions using the exact action IDs advertised by the live form.
-- Completed reports, a downloadable review record and workflow activity.
+- Completed reports, a downloadable review record and expandable workflow activity.
 
 ### School evidence review
 
@@ -115,9 +121,9 @@ The **Reviewed plan** editor is prefilled with the live draft. Staff can edit th
 
 ## 6. A two-browser demonstration
 
-1. Open the deployed URL in a normal browser as a parent. Choose a demo question and submit it.
+1. Open the deployed URL in a normal browser as a parent. Expand **Explore with an example**, choose a question, then select **Create progress report**.
 2. For a request awaiting review, keep that Parent tab open.
-3. Open the same deployed app in a second browser or private window. Select **Teacher / School**, enter the school access code and a reviewer name.
+3. Open the same deployed app in a second browser or private window. Select **Teacher / School** in the top bar, enter the school access code and a reviewer name.
 4. Open the pending request, read its context, supply the evidence or edit the plan, and submit a decision.
 5. Return to the Parent tab. Its report area checks the shared inbox every eight seconds and displays the final response when ready.
 
@@ -156,7 +162,7 @@ Requests and review submissions are not retried automatically. Reconnection foll
 |---|---|
 | Configuration missing on Cloud | Paste the delivered secrets file into Advanced settings / App settings → Secrets. A local file excluded from GitHub is not automatically available on Cloud. |
 | Unauthorized connection | Confirm the app API key belongs to the current published Student360 Workflow app. |
-| Wrong app type | Sign in to school view → Connection & workspace → Check Dify connection. Use a Workflow app key. |
+| Wrong app type | Check the app type in Dify. This frontend requires a published Workflow app key. |
 | Published workflow output mismatch | Publish the supplied final workflow; its output must be `student_progress_report`. |
 | School review cannot load a form | Keep Web app delivery enabled on both Dify Human Input nodes. |
 | Missing student evidence | Check the knowledge-base binding and retrieval settings in the published Dify app. |
@@ -176,11 +182,11 @@ Student360_Professional/
   dify_client.py               Server-side HTTP and SSE client
   workflow.py                  Start, pause, review, resume and final-report handling
   store.py                     Shared SQLite request inbox and submission leases
-  ui.py                        Branding, status cards and report exports
+  ui.py                        Portal imagery, typography, status and report exports
   requirements.txt             Streamlit dependency
   README.md                    This guide
   assets/
-    style.css                  Professional responsive visual system
+    style.css                  Responsive ivory/green and navy design system
     scroll.js                  Smooth scroll and Top button enhancement
     favicon.svg                Student360 mark
     parent_child.png           Parent portal photo

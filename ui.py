@@ -1,6 +1,5 @@
-"""Original Student360 visual system and small presentation helpers."""
+"""Student360 presentation: purposeful imagery, native controls, real workflow states."""
 from __future__ import annotations
-
 from datetime import datetime
 from html import escape
 from pathlib import Path
@@ -14,47 +13,11 @@ ROOT = Path(__file__).resolve().parent
 
 @st.cache_data(show_spinner=False)
 def asset_uri(filename: str) -> str:
-    """Cache public local images only; this cache never holds a credential or report."""
+    """Only public, bundled imagery is cached; never credentials or reports."""
     path = ROOT / 'assets' / filename
     mime = 'image/png' if path.suffix == '.png' else 'image/jpeg'
     return 'data:' + mime + ';base64,' + base64.b64encode(path.read_bytes()).decode('ascii')
 
-
-def install_motion(enabled: bool = True):
-    script = (ROOT / 'assets' / 'scroll.js').read_text(encoding='utf-8')
-    flag = 'true' if enabled else 'false'
-    # The executed code is a static local asset. User questions and Dify content are
-    # never passed to JavaScript-enabled HTML.
-    st.html('<div data-s360-controller data-s360-autoscroll="' + flag + '" style="display:none"></div><script>' + script + '</script>',
-            unsafe_allow_javascript=True)
-
-
-def anchor(name: str):
-    if name not in {'s360-top', 's360-question', 's360-request', 's360-report', 's360-review', 's360-progress'}:
-        return
-    st.html(f'<div id="{name}" class="scroll-anchor" aria-hidden="true"></div>')
-
-
-def scroll_anchor(name: str, event_key: str):
-    if name not in {'s360-request', 's360-report', 's360-review', 's360-progress'}:
-        return
-    st.html(f'<div id="{name}" class="scroll-anchor" data-s360-scroll-key="{escape(event_key, quote=True)}" aria-hidden="true"></div>')
-
-
-def back_to_top():
-    st.html('<button type="button" class="back-to-top" data-s360-scroll-to="s360-top" aria-label="Back to top">↑ <span>Top</span></button>')
-
-
-def school_card(compact: bool = False):
-    image = asset_uri('christian_school.png')
-    css_class = 'school-photo-card school-photo-compact' if compact else 'school-photo-card'
-    st.html(f'<div class="{css_class}"><img src="{image}" alt="The Christian Education school reception supplied by the school" loading="lazy"/><div class="school-photo-caption"><span class="photo-kicker">OUR SCHOOL</span><b>Christian Education</b><span>School & home, connected.</span></div></div>')
-
-
-def process_strip():
-    steps = [('file', 'Records'), ('people', 'Human review'), ('check', 'Your report')]
-    content = ''.join(f'<div><span>{icon(symbol,20)}</span><b>{label}</b></div>' for symbol, label in steps)
-    st.html('<div class="visual-process">' + content + '</div>')
 
 ICONS = {
     'book': '<path d="M4 5.5c3-1 5-.5 8 1.5v14c-3-2-5-2.5-8-1.5zM20 5.5c-3-1-5-.5-8 1.5v14c3-2 5-2.5 8-1.5z"/>',
@@ -78,40 +41,43 @@ def icon(name: str, size: int = 22) -> str:
 
 def css(school: bool = False):
     style = (ROOT / 'assets' / 'style.css').read_text(encoding='utf-8')
-    accent, tint = ('#254d87', '#edf2fa') if school else ('#087f83', '#edf9f7')
-    st.html('<style>:root{--accent:' + accent + ';--accent-tint:' + tint + ';}</style><style>' + style + '</style>')
+    tokens = ('--ink:#26364d;--muted:#707d92;--accent:#334e82;--accent-deep:#172b4d;--accent-tint:#edf1fa;--canvas:#f2f4f8;--wash:#e4eaf3;--line:#dde3ed;'
+              if school else '--ink:#23352f;--muted:#68756e;--accent:#286356;--accent-deep:#173f36;--accent-tint:#edf3ee;--canvas:#f7f7f2;--wash:#e8eee3;--line:#e0e6df;')
+    st.html('<style>' + style + '</style><style>:root{' + tokens + '}</style>')
 
 
-def brand(sidebar: bool = False):
-    st.html(f'<div class="brand {"brand-side" if sidebar else ""}"><span class="brand-mark">{icon("book",26)}</span><div><div class="brand-name">Student<span>360</span></div><div class="brand-sub">PROGRESS, WITH PERSPECTIVE</div></div></div>')
+def brand():
+    st.html(f'<div class="brand"><span class="brand-mark">{icon("book",25)}</span><div><div class="brand-name">Student<span>360</span></div><div class="brand-sub">CHRISTIAN EDUCATION</div></div></div>')
 
 
-def topbar(school: bool):
-    left, right = st.columns([3, 2], vertical_alignment='center')
-    with left:
-        brand()
-    with right:
-        label = 'TEACHER / SCHOOL WORKSPACE' if school else 'PARENT PORTAL'
-        st.html(f'<div class="topbar-right"><span class="workspace-pill">{icon("school" if school else "people",16)}{label}</span><span class="topbar-caption">Student progress & support</span></div>')
-
-
-def hero(school: bool):
+def landing_story(school: bool = False):
     photo = asset_uri('teacher_students.png' if school else 'parent_child.png')
+    school_photo = asset_uri('christian_school.png')
     if school:
-        school_photo = asset_uri('christian_school.png')
-        eyebrow = 'TEACHER / SCHOOL'
-        title = 'Good judgement.<br>Better next steps.'
-        subtitle = 'Check evidence. Refine plans. Support every learner.'
-        tags = icon('shield', 15) + ' Evidence' + '<span class="hero-dot">·</span>' + icon('people', 15) + ' Human review'
-        visual = f'<div class="hero-visual"><img class="hero-photo" src="{photo}" alt="Illustrative teacher supporting two students with their learning" fetchpriority="high"/><div class="school-inset"><img src="{school_photo}" alt="Christian Education school reception"/><div><span>OUR SCHOOL</span><b>Christian Education</b></div></div></div>'
+        kicker = 'THE SCHOOL WORKSPACE'
+        title = 'Your judgement.<br><em>Their next step.</em>'
+        subtitle = 'A focused space to check evidence and review learning plans.'
+        alt = 'Illustrative teacher and students working through a lesson together'
+        caption = 'Thoughtful support starts with you.'
     else:
-        eyebrow = 'PARENT PORTAL'
-        title = 'Every step.<br>A clearer picture.'
-        subtitle = 'Understand progress. Support what comes next.'
-        tags = icon('book', 15) + ' Learning records' + '<span class="hero-dot">·</span>' + icon('people', 15) + ' Teacher guidance'
-        visual = f'<div class="hero-visual"><img class="hero-photo" src="{photo}" alt="Illustrative parent and child learning together at home" fetchpriority="high"/><div class="photo-stamp"><span>{icon("people",18)}</span><div><b>Learning, together.</b><small>A stronger school–home connection.</small></div></div></div>'
-    role_class = 'hero-school' if school else 'hero-parent'
-    st.html(f'<section class="hero photo-hero {role_class}"><div class="hero-copy"><div class="eyebrow">{eyebrow}</div><h1>{title}</h1><p>{subtitle}</p><div class="hero-tags">{tags}</div></div>{visual}</section>')
+        kicker = 'THE PARENT SPACE'
+        title = 'Understand today.<br><em>Support tomorrow.</em>'
+        subtitle = 'A clearer picture of your child’s learning, one question at a time.'
+        alt = 'Illustrative parent and child learning together at home'
+        caption = 'School & home. A shared next step.'
+    st.html(f'<section class="landing-story {"school-story" if school else "parent-story"}"><div class="eyebrow"><span class="eyebrow-line"></span>{kicker}</div><h1>{title}</h1><p class="landing-intro">{subtitle}</p><figure class="story-photo"><img src="{photo}" alt="{alt}" fetchpriority="high"/><figcaption><span>{caption}</span>{icon("book",18)}</figcaption></figure><div class="school-signature"><img src="{school_photo}" alt="Christian Education reception"/><div><b>Christian Education</b><span>Student progress & support</span></div><span class="signature-line"></span>{icon("school",21)}</div></section>')
+
+
+def school_header(reviewer: str = ''):
+    name = reviewer.strip()
+    welcome = 'Welcome' + (', ' + name if name else '') + '.'
+    photo = asset_uri('teacher_students.png')
+    school_photo = asset_uri('christian_school.png')
+    st.html(f'<section class="workspace-hero"><div class="workspace-copy"><div class="eyebrow">TEACHER / SCHOOL</div><h1>{escape(welcome)}</h1><p>A clear view of the requests that need your judgement.</p><div class="workspace-school">{icon("school",16)} Christian Education</div></div><div class="workspace-photos"><img src="{photo}" alt="Illustrative teacher supporting two students"/><img class="workspace-school-photo" src="{school_photo}" alt="Christian Education school reception"/></div></section>')
+
+
+def page_heading(title: str, description: str = '', kicker: str = ''):
+    st.html(f'<header class="page-heading"><div class="eyebrow">{escape(kicker)}</div><h1>{escape(title)}</h1><p>{escape(description)}</p></header>')
 
 
 def section(title: str, caption: str = '', kicker: str = ''):
@@ -122,11 +88,11 @@ def section(title: str, caption: str = '', kicker: str = ''):
 
 def banner(title: str, description: str, tone: str = 'blue'):
     symbol = {'green': 'check', 'red': 'search', 'amber': 'clock', 'purple': 'people'}.get(tone, 'file')
-    st.html(f'<div class="status-banner tone-{tone}"><div class="status-icon">{icon(symbol,24)}</div><div><b>{escape(title)}</b><p>{escape(description)}</p></div></div>')
+    st.html(f'<div class="status-banner tone-{tone}" role="status"><div class="status-icon">{icon(symbol,22)}</div><div><b>{escape(title)}</b><p>{escape(description)}</p></div></div>')
 
 
 def stat(label: str, value: object, note: str, symbol: str, tone: str = 'blue'):
-    st.html(f'<div class="stat-card tone-{tone}"><div class="stat-top"><span>{escape(label)}</span><span class="stat-icon">{icon(symbol,21)}</span></div><div class="stat-value">{escape(str(value))}</div><div class="stat-note">{escape(note)}</div></div>')
+    st.html(f'<div class="stat-card tone-{tone}"><div class="stat-icon">{icon(symbol,23)}</div><div><div class="stat-label">{escape(label)}</div><div class="stat-value">{escape(str(value))}<span>{escape(note)}</span></div></div></div>')
 
 
 def badge(text: str, tone: str = 'blue'):
@@ -142,23 +108,46 @@ def case_ref(case: dict) -> str:
 
 
 def tracker(case: dict):
+    """Only show a review stage when this request actually entered human review."""
     phase = case['phase']
-    complete = phase == 'complete'
-    reviewed = bool(case.get('review_history'))
-    review_label = 'Teacher review' if case.get('review_kind') == 'teacher' else 'School review'
-    stages = [('Question received', True), ('Record lookup', phase in {'awaiting_review', 'complete'} or reviewed),
-              (review_label if phase == 'awaiting_review' or reviewed else 'Review if needed', reviewed or complete),
-              ('Response ready', complete)]
-    html = '<div class="tracker">'
-    for i, (label, done) in enumerate(stages):
-        active = not done and (i == 1 or (i == 2 and phase == 'awaiting_review'))
-        html += f'<div class="tracker-step {"done" if done else "active" if active else ""}"><span class="tracker-number">{icon("check",14) if done else i+1}</span><span>{escape(label)}</span></div>'
-    st.html(html + '</div>')
+    complete, reviewing = phase == 'complete', phase == 'awaiting_review'
+    reviewed = bool(case.get('review_history')) or case.get('metadata', {}).get('review_status') in {'teacher_approved', 'staff_confirmed', 'not_approved', 'timed_out'}
+    stages = [('Request received', 'done'), ('Preparing response', 'done' if reviewing or complete else 'active')]
+    if reviewing or reviewed:
+        label = 'Teacher review' if case.get('review_kind') == 'teacher' else 'School review'
+        stages.append((label, 'active' if reviewing else 'done'))
+    stages.append(('Response ready', 'done' if complete else 'waiting'))
+    parts = []
+    for i, (label, state) in enumerate(stages):
+        number = icon('check', 13) if state == 'done' else str(i+1)
+        parts.append(f'<div class="tracker-step {state}"><span class="tracker-number">{number}</span><span>{escape(label)}</span></div>')
+    st.html('<div class="tracker" aria-label="Request progress">' + ''.join(parts) + '</div>')
+
+
+def install_motion(enabled: bool = True):
+    script = (ROOT / 'assets' / 'scroll.js').read_text(encoding='utf-8')
+    flag = 'true' if enabled else 'false'
+    # Only trusted local code is executable. Reports and questions never enter it.
+    st.html('<div data-s360-controller data-s360-autoscroll="' + flag + '" style="display:none"></div><script>' + script + '</script>', unsafe_allow_javascript=True)
+
+
+def anchor(name: str):
+    if name in {'s360-top', 's360-question', 's360-request', 's360-report', 's360-review', 's360-progress'}:
+        st.html(f'<div id="{name}" class="scroll-anchor" aria-hidden="true"></div>')
+
+
+def scroll_anchor(name: str, event_key: str):
+    if name in {'s360-top', 's360-request', 's360-report', 's360-review', 's360-progress'}:
+        st.html(f'<div id="{name}" class="scroll-anchor" data-s360-scroll-key="{escape(event_key, quote=True)}" aria-hidden="true"></div>')
+
+
+def back_to_top():
+    st.html('<button type="button" class="back-to-top" data-s360-scroll-to="s360-top" aria-label="Back to top">↑ <span>Top</span></button>')
 
 
 def footer(school: bool):
     label = 'Teacher / School workspace' if school else 'Parent portal'
-    st.html(f'<footer class="app-footer"><span>Student360 <span class="footer-separator">/</span> {label}</span><span>Thoughtful answers. Human judgement.</span></footer>')
+    st.html(f'<footer class="app-footer"><span><b>Student360</b><span class="footer-separator">/</span>Christian Education</span><span>{label}</span></footer>')
 
 
 def report_body(report: str) -> str:
@@ -194,6 +183,6 @@ def printable_report(case: dict) -> bytes:
     flush()
     title = 'Student360 · ' + escape(case.get('student') or 'Progress report')
     document = f'''<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{title}</title><style>
-    body{{margin:0;background:#f2f5f8;color:#203249;font:16px/1.75 system-ui,-apple-system,sans-serif}}main{{max-width:820px;margin:40px auto;padding:50px;background:#fff;border-top:5px solid #087f83;box-shadow:0 8px 40px #1023340d}}h1{{font-size:30px;color:#12334a}}h2{{font-size:23px}}h3,h4{{font-size:18px;margin-top:28px;color:#087f83}}aside{{padding:12px 18px;background:#f0f7f6;border-left:3px solid #087f83}}.meta,footer{{color:#68778b;font-size:12px}}.bullet{{margin:3px 0}}footer{{border-top:1px solid #e4eaf0;margin-top:36px;padding-top:18px}}@media print{{body{{background:white}}main{{margin:0;padding:16px;box-shadow:none;max-width:none}}h2,h3{{break-after:avoid}}p,aside{{orphans:3;widows:3}}}}@media(max-width:700px){{main{{margin:0;padding:24px}}}}
+    body{{margin:0;background:#f7f7f2;color:#203249;font:16px/1.75 system-ui,-apple-system,sans-serif}}main{{max-width:820px;margin:40px auto;padding:50px;background:#fff;border-top:5px solid #286356;box-shadow:0 8px 40px #1023340d}}h1{{font-size:30px;color:#12334a}}h2{{font-size:23px}}h3,h4{{font-size:18px;margin-top:28px;color:#286356}}aside{{padding:12px 18px;background:#f0f7f6;border-left:3px solid #286356}}.meta,footer{{color:#68778b;font-size:12px}}.bullet{{margin:3px 0}}footer{{border-top:1px solid #e4eaf0;margin-top:36px;padding-top:18px}}@media print{{body{{background:white}}main{{margin:0;padding:16px;box-shadow:none;max-width:none}}h2,h3{{break-after:avoid}}p,aside{{orphans:3;widows:3}}}}@media(max-width:700px){{main{{margin:0;padding:24px}}}}
     </style></head><body><main><div class="meta">{escape(case_ref(case))} · {escape(local_time(case['created']))}</div>{''.join(chunks)}<footer>Student360 · Prepared from the published school workflow.<br>To save as PDF, open your browser’s Print menu and select Save as PDF.</footer></main></body></html>'''
     return document.encode('utf-8')
