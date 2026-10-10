@@ -127,12 +127,14 @@ def execute(client: DifyClient, store: CaseStore, case_id: str, start: bool = Fa
         if start and case.get('run_id'):
             start = False
         case['phase'], case['error'] = 'running', ''
+        case['error_status'], case['error_code'] = None, ''
         store.save(case, owner)
         events = (client.start(case['question'], case['report_language'], case['user']) if start
                   else client.resume(case['run_id'], case['user']))
         consume(client, store, case, owner, events, progress)
     except DifyError as exc:
         case['phase'], case['error'] = 'interrupted', client.redact(exc)
+        case['error_status'], case['error_code'] = exc.status, exc.code
         store.save(case, owner)
     finally:
         store.release(case_id, owner)
@@ -165,6 +167,7 @@ def submit_review(client: DifyClient, store: CaseStore, case_id: str, token: str
         # A network error may happen after Dify accepts a decision. Require refresh/reconnect,
         # never retry the same form submission silently.
         case['phase'], case['error'] = ('awaiting_review' if exc.status in {400, 422} else 'interrupted'), client.redact(exc)
+        case['error_status'], case['error_code'] = exc.status, exc.code
         store.save(case, owner)
         return case['error']
     finally:
@@ -207,6 +210,10 @@ def display_state(case: dict) -> tuple[str, str, str]:
     if phase in {'running', 'created'}:
         return 'Preparing your report', 'Checking the student record and supporting information.', 'blue'
     if phase == 'interrupted':
+        if not case.get('run_id'):
+            if case.get('error_status') in {401, 403} or 'connection was denied' in case.get('error', ''):
+                return 'Request could not start', 'The report service denied access. Your question is saved; the school needs to restore the connection.', 'red'
+            return 'Request could not be confirmed', 'Your question is saved, but no workflow ID was received.', 'amber'
         return 'Connection needs attention', 'Your request is retained. Reconnect to continue its workflow.', 'amber'
     report = case.get('report', '')
     review = case.get('metadata', {}).get('review_status', '')

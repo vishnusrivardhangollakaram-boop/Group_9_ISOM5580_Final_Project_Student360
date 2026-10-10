@@ -48,6 +48,7 @@ class CaseStore:
             'run_id': '', 'task_id': '', 'form_token': '', 'form': None,
             'review_kind': '', 'report': '', 'outputs': {}, 'metadata': {},
             'events': [], 'review_history': [], 'error': '', 'last_checked': 0,
+            'error_status': None, 'error_code': '',
         }
         with self.connection() as db:
             db.execute('INSERT INTO cases(id,public_token,created,updated,phase,payload) VALUES(?,?,?,?,?,?)',

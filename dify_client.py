@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import re
 from collections.abc import Iterable, Iterator
 from urllib.error import HTTPError, URLError
 from urllib.parse import quote, urlencode, urlparse
@@ -9,9 +10,10 @@ from urllib.request import Request, urlopen
 
 
 class DifyError(RuntimeError):
-    def __init__(self, message: str, status: int | None = None):
+    def __init__(self, message: str, status: int | None = None, code: str = ''):
         super().__init__(message)
         self.status = status
+        self.code = code
 
 
 def parse_sse(lines: Iterable[bytes | str]) -> Iterator[dict]:
@@ -51,10 +53,14 @@ class DifyClient:
         self.base_url, self._key, self.timeout = base_url, api_key.strip(), timeout
 
     def redact(self, value: object) -> str:
-        return str(value).replace(self._key, '[redacted]')[:1000]
+        text = str(value).replace(self._key, '[redacted]')
+        text = re.sub(r'\bapp-[A-Za-z0-9_-]+', '[redacted]', text)
+        text = re.sub(r'(?i)Bearer\s+\S+', 'Bearer [redacted]', text)
+        return text[:1000]
 
     def request(self, method: str, path: str, body: dict | None = None, stream: bool = False):
         headers = {'Authorization': 'Bearer ' + self._key,
+                   'User-Agent': 'Student360/4.0',
                    'Accept': 'text/event-stream' if stream else 'application/json'}
         data = None
         if body is not None:
@@ -66,19 +72,31 @@ class DifyClient:
         except HTTPError as exc:
             messages = {
                 401: 'The app connection was not authorized. Check the configured Dify app key.',
-                403: 'The app connection was denied. Check Dify access settings.',
+                403: 'Dify API access was denied. The app owner should check that this app’s Service API is enabled.',
                 404: 'This workflow or review form could not be found. Check the published app and reconnect.',
                 409: 'This review has already been submitted. Refresh the request to see its current status.',
                 410: 'This review form has expired. Collect the latest workflow response.',
                 429: 'The report service is busy. Please wait briefly and reconnect.',
             }
-            detail = ''
-            if exc.code not in messages:
-                try:
-                    detail = ' ' + self.redact(json.loads(exc.read()).get('message', ''))[:400]
-                except (ValueError, AttributeError):
-                    pass
-            raise DifyError(messages.get(exc.code, f'The report service returned HTTP {exc.code}.' + detail), exc.code) from exc
+            # Preserve the server's reason for ALL errors, including 401/403.
+            # Never display a raw HTML gateway page, response headers or request body.
+            code, detail = '', ''
+            try:
+                payload = json.loads(exc.read(16384))
+                if isinstance(payload, dict):
+                    code = re.sub(r'[^a-zA-Z0-9_.-]', '', self.redact(payload.get('code') or ''))[:80]
+                    detail = self.redact(payload.get('message') or '')[:500]
+            except (ValueError, UnicodeError, OSError):
+                pass
+            finally:
+                exc.close()
+            message = f'HTTP {exc.code}' + (f' · {code}' if code else '')
+            message += '\n' + messages.get(exc.code, 'The report service could not accept this request.')
+            if detail:
+                message += '\nDify response: ' + detail
+            else:
+                message += '\nNo readable JSON error was returned by the API or its gateway.'
+            raise DifyError(message, exc.code, code) from exc
         except (URLError, TimeoutError, OSError) as exc:
             raise DifyError('The report connection was interrupted. Reconnect to the existing request to continue.') from exc
 

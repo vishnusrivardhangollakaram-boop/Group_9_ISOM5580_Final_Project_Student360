@@ -8,15 +8,13 @@ Your final API key and `https://api.dify.ai/v1` endpoint are already configured 
 
 ### The redesigned interface
 
-The attached TaleTwinkle reference informed the cohesive use of imagery, colour and controls. Student360 has been rebuilt as a professional school portal:
+- **Parent:** a bright, clean surface with a teal/navy wordmark, an editorial portrait panel and a focused white question card. The active request opens on its own report page.
+- **Teacher / School:** a distinct blue/navy palette, a staff entry page with a classroom portrait, a prominent real-school header and a compact review workspace. The original Christian Education reception image also appears as a large feature on both entry pages, with a full-photo expander.
+- **Navigation:** **Parent** and **Teacher / School** switch workspaces. **New question**, **My reports**, **Review inbox** and **Completed reports** open implemented pages. **Options** contains auto-scroll, reviewer name and staff sign-out.
+- **Rendering fixes:** no icon-only logo; decorative vectors are embedded as self-contained image sources instead of inline SVG. Primary-button labels have explicit contrast, including Streamlit's nested Markdown labels.
+- **Real states:** all reports, review decisions and inbox counts come from actual requests. Requests denied before a run ID is returned do not display a preparing-response tracker. Their questions can be restored to the form without an automatic retry.
 
-- **Parent:** warm ivory and forest green, a parent/child photograph alongside the question form, and a focused page for the active request and final report.
-- **Teacher / School:** navy styling, teacher/student imagery alongside the supplied Christian Education school photo, an access-code entry page, a compact review inbox and side-by-side evidence and decision panels.
-- **Navigation:** use **Parent** and **Teacher / School** at the top. **New question**, **My reports**, **Review inbox** and **Completed reports** open implemented pages. **Options** contains auto-scroll, reviewer name and staff sign-out.
-- **Reports:** one **Download report** menu offers printable HTML and Markdown. Native buttons, forms and menus retain keyboard interaction. Narrow-screen layouts stack the main panels.
-- **Workflow states:** counts come from stored requests. Decisions come from the live Dify form. An automatic answer is labelled as a progress response. The tracker includes human review only when that request actually enters review.
-
-The earlier sidebar, repeated hero banners, diagram strip and technical connection page have been removed. There are no decorative notifications, fabricated scores, inactive menu items, scheduling controls or upload controls. Detailed instructions and demonstration questions are in expanders.
+There are no decorative notifications, invented progress scores, inactive menu items or upload controls. The page background is plain. Photography stays within defined panels. Examples and detailed instructions remain in expanders.
 
 **Auto-scroll** moves to a new request, an opened review and a completed response. It waits while you type or scroll manually, respects reduced-motion preferences, and can be disabled in **Options**. The **Top** button returns to the beginning. Periodic refreshes do not repeatedly move the page.
 
@@ -36,6 +34,8 @@ streamlit run app.py
 ```
 
 On Windows, activate with `.venv\Scripts\activate` instead. Open the local URL printed by Streamlit, usually `http://localhost:8501`.
+
+Your Streamlit Secrets screenshot contains the two API settings. To require staff sign-in on Cloud, also add `SCHOOL_ACCESS_CODE = "your-school-access-code"`; otherwise the app deliberately uses its labelled demonstration mode.
 
 The Parent portal opens first. The top navigation switches to the Teacher/School workspace. The initial school access code is **`Student360-Review`**; change `SCHOOL_ACCESS_CODE` in the same secrets file when sharing the app. Staff enter a display name; the app records that name with each decision.
 
@@ -80,11 +80,25 @@ The optional Student name box is folded into the `question` text; the frontend d
 
 In Dify, confirm the imported workflow is published, the **Find student records** retrieval node is bound to your new knowledge base, the selected model is enabled, and **Web app delivery** remains enabled on both Human Input nodes. The attached YAML has an empty `dataset_ids` list because knowledge-base bindings are installation-specific. The frontend does not change your model, retrieval or evidence rules.
 
-The app reads the final `student_progress_report` instead of the older `answer` output. It renders only the completed report in the Parent portal. Intermediate LLM drafts, school forms, submitted evidence and form tokens stay out of the Parent view. A translated report comes from Dify’s final translation branch; the frontend does not make a separate translation-model call. The report language selector controls the report, while interface navigation remains in English.
+The app reads the final `student_progress_report` instead of the older `answer` output. It renders only the completed report in the Parent portal. Intermediate LLM drafts, school forms, submitted evidence and form tokens stay out of the Parent view. A translated report comes from Dify’s final translation branch; the frontend does not make a separate translation-model call. The global language selector translates the interface immediately and sets the report language for new requests. UI translations are local; only the final report is generated/translated by Dify. See the language section below.
+
+## Interface language and report language
+
+The top-bar language dropdown offers **English**, **简体中文** and **繁體中文** in both workspaces. It sits outside the question form, so a selection immediately reruns the app in that language. The choice also persists in the page URL as `lang=en`, `lang=zh-CN` or `lang=zh-TW`.
+
+- Navigation, headings, buttons, placeholders, help, validation, status messages, inbox filters, examples, review instructions and action labels use local translations from `locales/`. These cause **no translation API call**.
+- A new question captures the current selection in the existing Dify `report_language` input. Its exact backend values remain `English`, `Chinese (Simplified) 简体中文` and `Chinese (Traditional) 繁體中文`.
+- **The Dify YAML is unchanged.** It still produces the final `student_progress_report` in the requested language. The frontend never rewrites or translates that result.
+- Changing the interface language after submitting a request changes the interface only. That existing request keeps its saved report language, shown next to its question. To request another report language, submit a new question using that language.
+- Student names, questions, retrieved evidence, the editable teacher draft, staff submissions and server-provided diagnostic details retain their original content. Known template headings and instructions translate locally; original evidence passages remain intact.
+- The question and review editors use native controls with stable keys outside submit-only forms, so editing does not submit a workflow action and a language switch uses synchronized widget values. A report is sent only by **Get a progress report**; a review is submitted only by an explicit decision button.
+- Machine values such as action IDs, workflow routes and input/output names remain stable. The dictionaries translate display labels only.
+
+Browser/Streamlit service menus are platform UI; they are not translated by the application. Add new app-owned wording to both JSON catalogs when customizing the interface.
 
 ## 4. Parent experience
 
-- A warm ivory and forest-green portal with a focused question form, student name and report language.
+- A clean teal-and-navy parent portal with a focused question form, student name and a global language selector.
 - Honest progress states: preparing, school verification, teacher review, completed response or connection attention.
 - A request tracker and final report with the backend’s sources and review wording. Human review appears in the tracker only when it occurs.
 - **My reports** for requests from the current browser session.
@@ -97,7 +111,7 @@ Parents cannot submit teacher approvals or school evidence from their portal. Sw
 
 - A navy workspace with a shared review inbox, search, filters and actual request counts.
 - Separate school evidence and teacher plan-review forms.
-- An access-code gate, reviewer display name and school-only review history.
+- An access-code gate when SCHOOL_ACCESS_CODE is configured, reviewer display name and school-only review history.
 - Record context from the live Dify form, not a reconstructed frontend prompt.
 - Editable teacher plan prefilled with Dify’s `resolved_default_values`.
 - Decisions using the exact action IDs advertised by the live form.
@@ -121,7 +135,7 @@ The **Reviewed plan** editor is prefilled with the live draft. Staff can edit th
 
 ## 6. A two-browser demonstration
 
-1. Open the deployed URL in a normal browser as a parent. Expand **Explore with an example**, choose a question, then select **Create progress report**.
+1. Open the deployed URL in a normal browser as a parent. Expand **Explore with an example**, choose a question, then select **Get a progress report**.
 2. For a request awaiting review, keep that Parent tab open.
 3. Open the same deployed app in a second browser or private window. Select **Teacher / School** in the top bar, enter the school access code and a reviewer name.
 4. Open the pending request, read its context, supply the evidence or edit the plan, and submit a decision.
@@ -150,7 +164,7 @@ The three student aliases and the unknown-student scenario remain governed by yo
 
 ## 8. Responsiveness and connection recovery
 
-The frontend has one third-party runtime dependency: **Streamlit**. It performs no local embeddings, model loading, runtime image generation or heavy analytics. Branding and icons are small SVG assets; photos are bundled locally and their public image data is cached. The visual system uses local CSS and system fonts. The design adapts to narrower screens and respects reduced-motion preferences.
+The frontend has one third-party runtime dependency: **Streamlit**. It performs no local embeddings, model loading, runtime image generation or heavy analytics. The brand is a typographic wordmark. Decorative vector icons are encoded as image sources; photos are bundled locally and their public image data is cached. The visual system uses local CSS and system fonts. The design adapts to narrower screens and respects reduced-motion preferences.
 
 The live Dify response uses SSE streaming. Only workflow progress is shown before completion; draft model text is not mistaken for an approved report. Parent refreshes read the local inbox every eight seconds, with an API status read throttled to at most once per 30 seconds per active request. School inbox refreshes read local state every ten seconds. API latency is determined by your Dify workflow and models; this UI does not promise a measured speedup.
 
@@ -158,10 +172,31 @@ Requests and review submissions are not retried automatically. Reconnection foll
 
 ## 9. Troubleshooting
 
+### HTTP 403: “The app connection was denied”
+
+**Current check:** the supplied app key succeeded against Dify during this update. Both metadata endpoints returned HTTP 200, and the Vishnu workflow completed successfully. Your screenshot uses the correct Secrets variable names and base endpoint. The historical 403 explanation below remains useful if a deployment still returns it; it does not mean API access is currently disabled.
+
+The screenshots show the old frontend's message for **HTTP 403**, before a workflow ID was received. The request was denied at the API boundary: the Vishnu/student-not-found branch was not reached. This is not a retrieval/chunking setting or evidence-gap result.
+
+The earlier client discarded the server response for 403, so its exact reason cannot be recovered from that screenshot. A disabled Service API is one cause documented by Dify; a deployment access policy or upstream gateway can also reject a request. The updated client retains the HTTP status, JSON error code and redacted message. It never renders raw gateway HTML, request headers or credentials.
+
+1. Open the **published Student360 Workflow app in Dify** and its **API Access / Access API** page. Confirm the **Service API is enabled**.
+2. Confirm the API key was issued for **that same app**. If you imported the YAML into a different app, use a key belonging to the new app. Publishing an app alone does not establish that the Service API is enabled.
+3. In **Streamlit Community Cloud → App settings → Secrets**, use the current app key and `DIFY_API_BASE_URL = "https://api.dify.ai/v1"`. This is the API base URL, not a share/web-app URL. Save and reboot the app after a credential change.
+4. Return to the retained request and choose **Use this question again**, then **Get a progress report**. This is an explicit new submission. The app never silently repeats a workflow start.
+5. If the API still rejects it, expand **Connection details** to see the new status/code/message. If it says no readable JSON was returned, the app cannot identify the exact gateway policy; provide the HTTP status and time to the Dify administrator/support.
+
+For a timeout before the first workflow event, a run may already exist even though this app received no ID. Check Dify Logs before resubmitting. A known run ID continues through **Reconnect to this request** instead.
+
+See [Dify's disabled-Service-API explanation](https://docs.dify.ai/en/cli/troubleshooting) and [API setup](https://docs.dify.ai/en/api-reference/guides/get-started).
+
+### Other issues
+
+
 | Symptom | What to do |
 |---|---|
 | Configuration missing on Cloud | Paste the delivered secrets file into Advanced settings / App settings → Secrets. A local file excluded from GitHub is not automatically available on Cloud. |
-| Unauthorized connection | Confirm the app API key belongs to the current published Student360 Workflow app. |
+| Unauthorized connection (401) | Confirm the app API key belongs to the current published Student360 Workflow app. |
 | Wrong app type | Check the app type in Dify. This frontend requires a published Workflow app key. |
 | Published workflow output mismatch | Publish the supplied final workflow; its output must be `student_progress_report`. |
 | School review cannot load a form | Keep Web app delivery enabled on both Dify Human Input nodes. |
@@ -183,14 +218,19 @@ Student360_Professional/
   workflow.py                  Start, pause, review, resume and final-report handling
   store.py                     Shared SQLite request inbox and submission leases
   ui.py                        Portal imagery, typography, status and report exports
+  i18n.py                      Local UI language and review-label helpers
+  locales/
+    zh-CN.json                 Simplified Chinese interface messages
+    zh-TW.json                 Traditional Chinese interface messages
+  API_CHECK.md                 Recorded live API verification results
   requirements.txt             Streamlit dependency
   README.md                    This guide
   assets/
-    style.css                  Responsive ivory/green and navy design system
+    style.css                  Responsive parent and school design system
     scroll.js                  Smooth scroll and Top button enhancement
     favicon.svg                Student360 mark
-    parent_child.png           Parent portal photo
-    teacher_students.png       Teacher/School portal photo
+    parent_portrait.png        New Parent portal portrait
+    school_portrait.png        New staff entry portrait
     christian_school.png       Your original school photo
   MEDIA_NOTES.md               Image origins and final generation prompts
   .streamlit/
@@ -201,6 +241,6 @@ Student360_Professional/
     Student360_Final_Fixed.yml  Exact uploaded final workflow, for reference
 ```
 
-`data/requests.sqlite3` is created at runtime and is excluded from Git and the delivered ZIP. No tests, benchmark files, test frameworks or model packages are included. **No tests or live API runs were performed for this build, as requested.**
+`data/requests.sqlite3` is created at runtime and is excluded from Git and the delivered ZIP. No tests, benchmark files, test frameworks or model packages are included. **Live API checks were performed before this update, as explicitly requested:** `/info` and `/parameters` returned HTTP 200, and a real Vishnu workflow completed successfully with a student-record-not-found report. See `API_CHECK.md`. No unit tests, performance tests or application/browser runs were performed. This confirms the API key and published unknown-student route from the execution environment; it does not verify every student/review route or the deployed Streamlit host.
 
 Official references: [Streamlit deployment](https://docs.streamlit.io/deploy/streamlit-community-cloud/deploy-your-app), [Cloud secrets](https://docs.streamlit.io/deploy/streamlit-community-cloud/deploy-your-app/secrets-management), [Dify workflow execution](https://docs.dify.ai/en/api-reference/workflow-runs/run-workflow), [Dify Human Input flow](https://docs.dify.ai/en/api-reference/guides/human-input-flow), [Dify resumed events](https://docs.dify.ai/en/api-reference/workflow-runs/stream-workflow-events).

@@ -1,21 +1,28 @@
 # Student360 visual assets
 
-The school photo, `assets/christian_school.png`, is the original image supplied by you. It is included without retouching or generated changes. Responsive cropping is applied only by the browser layout. The photograph is used as the Christian Education school image; no new accreditation or institutional claims are added.
+`assets/christian_school.png` is the original school image supplied by you. It has not been retouched or regenerated. CSS controls its display crop. No additional accreditation or institutional claims are implied.
 
-The parent/child and teacher/student photos are decorative, AI-generated editorial assets. They depict fictional models, not actual families, pupils or school staff. The photos were produced with the built-in image generation tool and are bundled locally so the UI needs no external image service.
+The other photographs are decorative, AI-generated editorial assets depicting fictional people, not actual families, students or school staff. They were produced with the built-in image generation tool, not the fallback CLI, and are included locally. No image generation runs in the deployed app.
 
-## Asset paths
+## Final files
 
-- `assets/parent_child.png` — Parent portal hero.
-- `assets/teacher_students.png` — Teacher/School hero.
-- `assets/christian_school.png` — Actual supplied school photograph.
+- `assets/parent_portrait.png` — new Parent page portrait, 1024 × 1536.
+- `assets/school_portrait.png` — new staff entry portrait, 1024 × 1536.
+- `assets/christian_school.png` — actual supplied Christian Education school photo.
+- `assets/favicon.svg` — a small source-authored S favicon. The header uses a typographic wordmark, not an icon logo.
 
-## Final prompts
+The photographic text overlays are live HTML, not baked into the image. Decorative icons are fixed source-authored vectors encoded as `img` sources, keeping them separate from inline-SVG sanitization. They are not generated bitmap assets.
 
-### Parent/child
+## Final image generation prompts
 
-Use case: photorealistic-natural. A wide 3:2 premium editorial photograph of an East Asian parent and school-age child, about 11, reviewing a notebook together at a light wooden table in a bright contemporary living room. Natural encouraging expressions, realistic faces and hands, simple everyday clothing, soft daylight, warm ivory and muted sage. Keep subjects in a central safe area for responsive cropping. No logos, uniforms, readable text, watermarks, cartoons or exaggerated gestures. Generic fictional models.
+### Parent portrait
 
-### Teacher/students
+Use case: photorealistic-natural. Asset type: premium professional education portal portrait hero photograph, 1024x1536 vertical. A candid East Asian mother in her late thirties and her 12-year-old daughter studying together at a small light oak table in a bright contemporary Hong Kong apartment. Professional education magazine photography, real skin texture and natural expressions, mother in white linen blouse, child in muted sky-blue cotton shirt. They are looking down together at a single open workbook, the child holding a pencil, subtle warm smiles, reassuring and thoughtful. Compose both complete faces and both pairs of hands tightly together within the middle 70 percent of the frame so neither is cropped by a narrow UI panel. Camera slightly further away, lovely soft architectural light from right, neutral ivory interior, softly blurred navy shelf and houseplant. Leave bottom 30 percent mostly a dark navy chair/table shadow area for a white text overlay added separately in HTML. Refined, bright, natural, contemporary. Not cartoon, not stock-photo posing, no graphics, no words, no lettering, no logos, no watermarks. These are fictional illustrative people, not actual school members.
 
-Use case: photorealistic-natural. A wide 3:2 premium editorial photograph of a thoughtful female teacher helping two East Asian students, about 11–14, around a classroom desk. The teacher points naturally to an open workbook while the students listen and discuss. Natural faces and hands, understated clothing, a bright contemporary classroom with shelves and daylight, cream, timber and quiet blue tones. Keep all subjects in the central safe area. No school badges, logos, readable text, watermarks, cartoons or staged thumbs-up. Generic fictional models, not an identifiable actual school.
+### School portrait
+
+Use case: photorealistic-natural. Asset type: premium professional school portal portrait hero photograph, 1024x1536 vertical. Candid contemporary education magazine photography of a warm professional East Asian female teacher in her late thirties in a navy blazer with two East Asian students around age 13, a boy in a light blue shirt and a girl in cream, reviewing an open workbook at a small light oak table in an elegant bright modern classroom. Fictional people. Compose all three heads and faces close together within the central 75 percent of the portrait frame and upper-middle half; hands and open notebook clearly visible around the center. Teacher centered slightly behind students, thoughtful attentive expressions, natural and encouraging without posing for camera. Lower 30 percent mostly unoccupied dark navy table/chair area suitable for adding white heading text separately in HTML. Gentle window daylight, refined contemporary school interior, soft blue/navy/ivory palette, subtle bookshelves blurred behind them, real human skin texture. Not cartoon, no technology dashboard overlays, no text, no logo, no lettering or watermark.
+
+## School image placement
+
+The actual Christian Education reception photograph is used prominently in a full-width feature on both entry pages and as the main photograph in the school workspace header. The entry-page expander displays the entire original image. No new school image was generated for this update.
